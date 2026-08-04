@@ -21,12 +21,12 @@ import {
   ChevronRight,
   Laptop,
   Calendar,
+  CalendarDays,
   Target,
   Library,
   FileCheck,
   MessageSquare,
   User,
-  UserCheck,
   GraduationCap,
   Megaphone,
   LogOut
@@ -76,13 +76,15 @@ const organizerNavItems = [
 
 const teacherNavItems = [
   { icon: LayoutDashboard, label: "Dashboard", href: "/teacher/dashboard" },
-  { icon: UserCheck, label: "Pending Students", href: "/teacher/students/pending" },
-  { icon: Calendar, label: "Today's Classes", href: "/dashboard/live-classes" },
+  { icon: CalendarDays, label: "Today's Classes", href: "/dashboard/live-classes" },
+  { icon: Users, label: "My Classes", href: "/dashboard/classrooms" },
   { icon: BookOpen, label: "Study Materials", href: "/dashboard/study-materials" },
   { icon: FileText, label: "Assignments", href: "/dashboard/assignments" },
   { icon: ClipboardList, label: "Question Bank", href: "/dashboard/question-bank" },
+  { icon: Laptop, label: "Examinations", href: "/dashboard/online-exams" },
   { icon: BarChart3, label: "Student Analysis", href: "/dashboard/analytics" },
   { icon: FileCheck, label: "Attendance", href: "/dashboard/attendance" },
+  { icon: MessageSquare, label: "Messages", href: "/dashboard/messages" },
   { icon: Bell, label: "Notifications", href: "/dashboard/notifications" },
   { icon: User, label: "Profile", href: "/dashboard/profile" },
   { icon: Settings, label: "Settings", href: "/dashboard/settings" }
