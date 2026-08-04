@@ -261,7 +261,6 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 const DEFAULT_INSTITUTION = "DigiClassroom";
 const INVITED_TEACHER_DOMAIN = /@gmail\.com$/i;
-const FALLBACK_CLASS_CODES = new Set(["CLASS-2026-A1", "DIGI-DEMO"]);
 const LOCAL_ORGANIZERS_KEY = "digiclassroom.organizers";
 const LOCAL_SESSION_KEY = "digiclassroom.session";
 const LOCAL_TEACHER_INVITATIONS_KEY = "digiclassroom.teacherInvitations";
@@ -321,19 +320,6 @@ const startLocalSession = (user: User, rememberMe = true) => {
 
   const storage = rememberMe ? window.localStorage : window.sessionStorage;
   storage.setItem(LOCAL_SESSION_KEY, JSON.stringify(user));
-};
-
-const readLocalSession = () => {
-  if (!canUseBrowserStorage()) {
-    return null;
-  }
-
-  try {
-    const rawSession = window.localStorage.getItem(LOCAL_SESSION_KEY) || window.sessionStorage.getItem(LOCAL_SESSION_KEY);
-    return rawSession ? (JSON.parse(rawSession) as User) : null;
-  } catch {
-    return null;
-  }
 };
 
 const clearLocalSession = () => {
@@ -694,16 +680,6 @@ const findClassroomByJoinCode = async (classJoinCode: string) => {
     };
   }
 
-  if (FALLBACK_CLASS_CODES.has(normalizedCode)) {
-    return {
-      id: "demo-classroom",
-      name: "Demo Classroom",
-      institutionId: "demo-institution",
-      institutionName: DEFAULT_INSTITUTION,
-      joinCode: normalizedCode
-    };
-  }
-
   throw createAuthError("dc/class-code-invalid");
 };
 
@@ -742,7 +718,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
       if (!firebaseUser) {
-        setUser(readLocalSession());
+        clearLocalSession();
+        setUser(null);
         setIsLoading(false);
         return;
       }

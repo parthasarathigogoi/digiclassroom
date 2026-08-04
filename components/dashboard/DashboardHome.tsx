@@ -5,16 +5,9 @@ import Link from "next/link";
 import { motion } from "framer-motion";
 import { Award, BarChart3, Bell, BookOpen, Calendar, ClipboardCheck, ClipboardList, FileQuestion, FileText, Laptop, MessageSquare, Sparkles, Users } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
-import { defaultAssignments, defaultExams, materials, type Assignment, type Classroom, type Exam } from "@/lib/student/data";
 
 const DashboardHome: React.FC = () => {
   const { user } = useAuth();
-  const enrolled: Classroom[] = [];
-  const assignments: Assignment[] = defaultAssignments;
-  const exams: Exam[] = defaultExams;
-
-  const pendingAssignments = assignments.filter((item) => item.status === "pending").length;
-  const completedExams = exams.filter((item) => item.status === "completed").length;
 
   if (user?.role === "teacher") {
     const teacherName = user.name || "Teacher";
@@ -115,10 +108,10 @@ const DashboardHome: React.FC = () => {
   }
 
   const stats = [
-    { icon: BookOpen, label: "Joined Classes", value: enrolled.length.toString(), color: "bg-blue-100 text-blue-600" },
-    { icon: FileText, label: "Pending Work", value: pendingAssignments.toString(), color: "bg-amber-100 text-amber-600" },
-    { icon: Laptop, label: "Completed Exams", value: completedExams.toString(), color: "bg-green-100 text-green-600" },
-    { icon: Award, label: "Average Score", value: completedExams ? `${Math.round(exams.reduce((sum, item) => sum + (item.score || 0), 0) / completedExams)}%` : "0%", color: "bg-cyan-100 text-cyan-600" }
+    { icon: BookOpen, label: "Joined Classes", value: "0", color: "bg-blue-100 text-blue-600" },
+    { icon: FileText, label: "Pending Work", value: "0", color: "bg-amber-100 text-amber-600" },
+    { icon: Laptop, label: "Completed Exams", value: "0", color: "bg-green-100 text-green-600" },
+    { icon: Award, label: "Average Score", value: "0%", color: "bg-cyan-100 text-cyan-600" }
   ];
 
   return (
@@ -152,14 +145,8 @@ const DashboardHome: React.FC = () => {
             <h2 className="text-xl font-black text-ink">Today&apos;s Learning</h2>
             <Calendar className="text-ocean" size={22} />
           </div>
-          <div className="grid gap-4 md:grid-cols-3">
-            {materials.map((item) => (
-              <div key={item.id} className="rounded-2xl bg-slate-50 p-4">
-                <p className="text-xs font-bold uppercase tracking-wide text-ocean">{item.type}</p>
-                <h3 className="mt-2 font-bold text-ink">{item.title}</h3>
-                <p className="mt-1 text-sm text-slate-500">{item.subject} · {item.size}</p>
-              </div>
-            ))}
+          <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-8 text-center text-sm font-medium text-slate-500">
+            No study materials are available for your allocated class yet.
           </div>
         </section>
 
@@ -179,15 +166,9 @@ const DashboardHome: React.FC = () => {
           <ClipboardList className="text-ocean" size={22} />
         </div>
         <div className="space-y-3">
-          {assignments.slice(0, 3).map((item) => (
-            <div key={item.id} className="flex flex-col gap-3 rounded-2xl border border-slate-100 p-4 md:flex-row md:items-center md:justify-between">
-              <div>
-                <h3 className="font-bold text-ink">{item.title}</h3>
-                <p className="text-sm text-slate-500">{item.subject} · due {item.dueDate}</p>
-              </div>
-              <span className="w-fit rounded-full bg-slate-100 px-3 py-1 text-xs font-bold capitalize text-slate-600">{item.status}</span>
-            </div>
-          ))}
+          <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-8 text-center text-sm font-medium text-slate-500">
+            No assignments have been assigned to your class yet.
+          </div>
         </div>
       </section>
     </div>

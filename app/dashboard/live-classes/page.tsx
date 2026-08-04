@@ -6,13 +6,6 @@ import { motion } from "framer-motion";
 import { Calendar, Copy, Mic, MicOff, MonitorUp, PhoneOff, Send, Users, Video, VideoOff } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/contexts/AuthContext";
-import { cn } from "@/lib/utils";
-
-const sessions = [
-  { id: "data-structures", title: "Data Structures", className: "CSE 3rd Year", time: "10:00 AM - 11:00 AM" },
-  { id: "dbms", title: "DBMS", className: "CSE 2nd Year", time: "12:00 PM - 01:00 PM" },
-  { id: "math-101", title: "Math Live Class", className: "Grade 10", time: "05:00 PM - 06:00 PM" }
-];
 
 const LiveClassesPage: React.FC = () => {
   const { user } = useAuth();
@@ -40,7 +33,7 @@ const LiveClassesPage: React.FC = () => {
   const joinRoom = (room: string) => {
     const cleaned = room.trim().toLowerCase().replace(/\s+/g, "-");
     if (!cleaned) {
-      toast.error("Enter a class code or choose a session.");
+      toast.error("Enter a class code or room name.");
       return;
     }
     setActiveRoom(cleaned);
@@ -153,12 +146,9 @@ const LiveClassesPage: React.FC = () => {
             Today&apos;s Classes
           </div>
           <div className="space-y-3">
-            {sessions.map((session) => (
-              <button key={session.id} onClick={() => joinRoom(session.id)} className={cn("w-full rounded-xl border p-4 text-left transition", activeRoom === session.id ? "border-ocean bg-blue-50" : "border-slate-200 hover:border-ocean")}>
-                <p className="font-black text-ink">{session.title}</p>
-                <p className="mt-1 text-sm text-slate-500">{session.className} · {session.time}</p>
-              </button>
-            ))}
+            <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-6 text-center text-sm font-medium text-slate-500">
+              No scheduled classes available.
+            </div>
           </div>
         </section>
 
@@ -166,7 +156,7 @@ const LiveClassesPage: React.FC = () => {
           <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
             <div>
               <h2 className="text-xl font-black text-ink">{activeRoom ? `Room: ${activeRoom}` : "No active room"}</h2>
-              <p className="mt-1 flex items-center gap-2 text-sm text-slate-500"><Users size={16} /> {activeRoom ? "24 participants ready" : "Choose or enter a room to begin"}</p>
+              <p className="mt-1 flex items-center gap-2 text-sm text-slate-500"><Users size={16} /> {activeRoom ? "Room is active" : "Enter a room to begin"}</p>
             </div>
             <button disabled={!activeRoom} onClick={copyInvite} className="inline-flex w-fit items-center gap-2 rounded-xl border border-slate-200 px-4 py-3 text-sm font-bold text-slate-700 transition hover:border-ocean hover:text-ocean disabled:opacity-50">
               <Copy size={17} />

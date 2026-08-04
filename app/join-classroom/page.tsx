@@ -204,7 +204,7 @@ const JoinClassroomPage: React.FC = () => {
                 value={formData.classJoinCode}
                 onChange={(e) => setFormData({ ...formData, classJoinCode: e.target.value.toUpperCase() })}
                 className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 uppercase tracking-[0.14em] outline-none transition focus:border-blue-400 focus:ring-4 focus:ring-blue-100"
-                placeholder="CLASS-2026-A1"
+                placeholder="Enter class code from your organizer"
                 required
               />
             </div>
