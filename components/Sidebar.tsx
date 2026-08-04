@@ -57,6 +57,7 @@ const navItems = [
 
 const organizerNavItems = [
   { icon: LayoutDashboard, label: "Dashboard", href: "/organizer/dashboard" },
+  { icon: Building2, label: "Departments", href: "/organizer/departments" },
   { icon: Users, label: "Teachers", href: "/organizer/teachers" },
   { icon: GraduationCap, label: "Students", href: "/organizer/students" },
   { icon: Building2, label: "Classes", href: "/organizer/classes" },
@@ -64,7 +65,6 @@ const organizerNavItems = [
   { icon: Library, label: "Study Materials", href: "/organizer/study-materials" },
   { icon: FileText, label: "Assignments", href: "/organizer/assignments" },
   { icon: ClipboardList, label: "Examinations", href: "/organizer/examinations" },
-  { icon: Video, label: "Live Classes", href: "/organizer/live-classes" },
   { icon: Calendar, label: "Attendance", href: "/organizer/attendance" },
   { icon: BarChart3, label: "Analytics", href: "/organizer/analytics" },
   { icon: Megaphone, label: "Announcements", href: "/organizer/announcements" },

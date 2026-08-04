@@ -1,5 +1,5 @@
-import OrganizerSectionPage from "@/components/dashboard/OrganizerSectionPage";
+import AcademicAllocationManager from "@/components/dashboard/AcademicAllocationManager";
 
 export default function ClassesPage() {
-  return <OrganizerSectionPage section="classes" />;
+  return <AcademicAllocationManager mode="classes" />;
 }

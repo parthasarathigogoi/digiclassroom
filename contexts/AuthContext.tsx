@@ -45,7 +45,12 @@ export type User = {
   classroomId?: string;
   classroomName?: string;
   department?: string;
+  departmentId?: string;
+  semester?: string;
+  semesterId?: string;
+  classSection?: string;
   subject?: string;
+  subjectId?: string;
   institutionType?: InstitutionType;
 };
 
@@ -74,10 +79,105 @@ export type StudentAccessRequest = {
   classJoinCode: string;
   classroomId?: string;
   classroomName?: string;
+  departmentId?: string;
+  department?: string;
+  semesterId?: string;
+  semester?: string;
   institutionId?: string;
   institution: string;
   status: StudentRequestStatus;
   approvalRequestedAt?: unknown;
+};
+
+export type AcademicDepartment = {
+  id: string;
+  name: string;
+  code: string;
+  institutionId: string;
+};
+
+export type AcademicSemester = {
+  id: string;
+  name: string;
+  departmentId: string;
+  institutionId: string;
+};
+
+export type AcademicClass = {
+  id: string;
+  name: string;
+  section: string;
+  classCode: string;
+  departmentId: string;
+  departmentName: string;
+  semesterId: string;
+  semesterName: string;
+  institutionId: string;
+};
+
+export type AcademicSubject = {
+  id: string;
+  name: string;
+  code: string;
+  departmentId: string;
+  semesterId: string;
+  institutionId: string;
+};
+
+export type TeacherAllocationInput = {
+  teacherUserId?: string;
+  teacherEmail: string;
+  departmentId: string;
+  semesterId: string;
+  classId: string;
+  subjectId: string;
+};
+
+export type StudentAllocationInput = {
+  studentId: string;
+  departmentId: string;
+  semesterId: string;
+  classId: string;
+};
+
+export type AllocationScope = {
+  institutionId?: string;
+  departmentId?: string;
+  semesterId?: string;
+  classroomId?: string;
+  subjectId?: string;
+};
+
+export const canAccessAllocationScope = (user: User | null, scope: AllocationScope) => {
+  if (!user) {
+    return false;
+  }
+
+  if (user.role === "organizer") {
+    return !scope.institutionId || user.institutionId === scope.institutionId || user.id === scope.institutionId;
+  }
+
+  if (scope.institutionId && user.institutionId !== scope.institutionId) {
+    return false;
+  }
+
+  if (scope.departmentId && user.departmentId !== scope.departmentId) {
+    return false;
+  }
+
+  if (scope.semesterId && user.semesterId !== scope.semesterId) {
+    return false;
+  }
+
+  if (scope.classroomId && user.classroomId !== scope.classroomId) {
+    return false;
+  }
+
+  if (user.role === "teacher" && scope.subjectId && user.subjectId !== scope.subjectId) {
+    return false;
+  }
+
+  return true;
 };
 
 type OrganizerRegistrationInput = {
@@ -132,6 +232,16 @@ type AuthContextType = {
   activateTeacherInvitation: (input: TeacherActivationInput) => Promise<User>;
   getTeacherInvitation: (token: string) => Promise<TeacherInvitation>;
   listTeacherInvitations: () => Promise<TeacherInvitation[]>;
+  createDepartment: (input: Pick<AcademicDepartment, "name" | "code">) => Promise<AcademicDepartment>;
+  listDepartments: () => Promise<AcademicDepartment[]>;
+  createSemester: (input: Pick<AcademicSemester, "name" | "departmentId">) => Promise<AcademicSemester>;
+  listSemesters: (departmentId?: string) => Promise<AcademicSemester[]>;
+  createAcademicClass: (input: Omit<AcademicClass, "id" | "institutionId" | "departmentName" | "semesterName">) => Promise<AcademicClass>;
+  listAcademicClasses: (filters?: { departmentId?: string; semesterId?: string }) => Promise<AcademicClass[]>;
+  createSubject: (input: Pick<AcademicSubject, "name" | "code" | "departmentId" | "semesterId">) => Promise<AcademicSubject>;
+  listSubjects: (filters?: { departmentId?: string; semesterId?: string }) => Promise<AcademicSubject[]>;
+  allocateTeacher: (input: TeacherAllocationInput) => Promise<void>;
+  allocateStudent: (input: StudentAllocationInput & { approve?: boolean }) => Promise<void>;
   listPendingStudentRequests: () => Promise<StudentAccessRequest[]>;
   decideStudentRequest: (studentId: string, decision: "approve" | "reject") => Promise<void>;
   updateOrganizationSettings: (input: OrganizationSettingsInput) => Promise<void>;
@@ -155,6 +265,10 @@ const FALLBACK_CLASS_CODES = new Set(["CLASS-2026-A1", "DIGI-DEMO"]);
 const LOCAL_ORGANIZERS_KEY = "digiclassroom.organizers";
 const LOCAL_SESSION_KEY = "digiclassroom.session";
 const LOCAL_TEACHER_INVITATIONS_KEY = "digiclassroom.teacherInvitations";
+const LOCAL_DEPARTMENTS_KEY = "digiclassroom.departments";
+const LOCAL_SEMESTERS_KEY = "digiclassroom.semesters";
+const LOCAL_CLASSES_KEY = "digiclassroom.classes";
+const LOCAL_SUBJECTS_KEY = "digiclassroom.subjects";
 
 type LocalOrganizerAccount = {
   user: User;
@@ -267,6 +381,31 @@ const updateLocalTeacherInvitation = (invitationId: string, updates: Partial<Tea
 };
 
 const createLocalTeacherId = (email: string) => `local-teacher-${email.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`;
+
+const readLocalItems = <T,>(key: string): T[] => {
+  if (!canUseBrowserStorage()) {
+    return [];
+  }
+
+  try {
+    return JSON.parse(window.localStorage.getItem(key) || "[]") as T[];
+  } catch {
+    return [];
+  }
+};
+
+const writeLocalItems = <T,>(key: string, items: T[]) => {
+  if (!canUseBrowserStorage()) {
+    return;
+  }
+
+  window.localStorage.setItem(key, JSON.stringify(items));
+};
+
+const upsertLocalItem = <T extends { id: string }>(key: string, item: T) => {
+  const items = readLocalItems<T>(key);
+  writeLocalItems(key, items.some((current) => current.id === item.id) ? items.map((current) => (current.id === item.id ? item : current)) : [item, ...items]);
+};
 
 const isFirebaseAuthCode = (error: unknown, code: string) => {
   return typeof error === "object" && error !== null && "code" in error && String(error.code) === code;
@@ -994,6 +1133,234 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
+  const requireOrganizerInstitutionId = () => {
+    if (!user || user.role !== "organizer") {
+      throw createAuthError("dc/unauthorized-access");
+    }
+
+    return user.institutionId || user.id;
+  };
+
+  const createDepartment = async ({ name, code }: Pick<AcademicDepartment, "name" | "code">) => {
+    const institutionId = requireOrganizerInstitutionId();
+    const departmentRef = doc(collection(db, "academicDepartments"));
+    const department: AcademicDepartment = {
+      id: departmentRef.id,
+      name: name.trim(),
+      code: code.trim().toUpperCase(),
+      institutionId
+    };
+
+    try {
+      await setDoc(departmentRef, { ...department, createdAt: serverTimestamp(), updatedAt: serverTimestamp() });
+    } catch {
+      upsertLocalItem(LOCAL_DEPARTMENTS_KEY, department);
+    }
+
+    return department;
+  };
+
+  const listDepartments = async () => {
+    const institutionId = requireOrganizerInstitutionId();
+
+    try {
+      const snapshot = await getDocs(query(collection(db, "academicDepartments"), where("institutionId", "==", institutionId)));
+      return snapshot.docs.map((item) => ({ id: item.id, ...(item.data() as Omit<AcademicDepartment, "id">) })).sort((a, b) => a.name.localeCompare(b.name));
+    } catch {
+      return readLocalItems<AcademicDepartment>(LOCAL_DEPARTMENTS_KEY).filter((item) => item.institutionId === institutionId).sort((a, b) => a.name.localeCompare(b.name));
+    }
+  };
+
+  const createSemester = async ({ name, departmentId }: Pick<AcademicSemester, "name" | "departmentId">) => {
+    const institutionId = requireOrganizerInstitutionId();
+    const semesterRef = doc(collection(db, "academicSemesters"));
+    const semester: AcademicSemester = {
+      id: semesterRef.id,
+      name: name.trim(),
+      departmentId,
+      institutionId
+    };
+
+    try {
+      await setDoc(semesterRef, { ...semester, createdAt: serverTimestamp(), updatedAt: serverTimestamp() });
+    } catch {
+      upsertLocalItem(LOCAL_SEMESTERS_KEY, semester);
+    }
+
+    return semester;
+  };
+
+  const listSemesters = async (departmentId?: string) => {
+    const institutionId = requireOrganizerInstitutionId();
+    const filterItems = (items: AcademicSemester[]) => items
+      .filter((item) => item.institutionId === institutionId && (!departmentId || item.departmentId === departmentId))
+      .sort((a, b) => a.name.localeCompare(b.name));
+
+    try {
+      const snapshot = await getDocs(query(collection(db, "academicSemesters"), where("institutionId", "==", institutionId)));
+      return filterItems(snapshot.docs.map((item) => ({ id: item.id, ...(item.data() as Omit<AcademicSemester, "id">) })));
+    } catch {
+      return filterItems(readLocalItems<AcademicSemester>(LOCAL_SEMESTERS_KEY));
+    }
+  };
+
+  const createAcademicClass = async (input: Omit<AcademicClass, "id" | "institutionId" | "departmentName" | "semesterName">) => {
+    const institutionId = requireOrganizerInstitutionId();
+    const [departments, semesters] = await Promise.all([listDepartments(), listSemesters(input.departmentId)]);
+    const department = departments.find((item) => item.id === input.departmentId);
+    const semester = semesters.find((item) => item.id === input.semesterId);
+
+    if (!department || !semester) {
+      throw createAuthError("dc/class-code-invalid");
+    }
+
+    const classRef = doc(collection(db, "academicClasses"));
+    const academicClass: AcademicClass = {
+      id: classRef.id,
+      name: input.name.trim(),
+      section: input.section.trim(),
+      classCode: input.classCode.trim().toUpperCase(),
+      departmentId: input.departmentId,
+      departmentName: department.name,
+      semesterId: input.semesterId,
+      semesterName: semester.name,
+      institutionId
+    };
+
+    try {
+      await setDoc(classRef, { ...academicClass, createdAt: serverTimestamp(), updatedAt: serverTimestamp() });
+      await setDoc(doc(db, "classrooms", classRef.id), {
+        id: classRef.id,
+        name: academicClass.name,
+        joinCode: academicClass.classCode,
+        institutionId,
+        institutionName: user?.institution || DEFAULT_INSTITUTION,
+        departmentId: academicClass.departmentId,
+        departmentName: academicClass.departmentName,
+        semesterId: academicClass.semesterId,
+        semesterName: academicClass.semesterName,
+        section: academicClass.section,
+        updatedAt: serverTimestamp()
+      }, { merge: true });
+    } catch {
+      upsertLocalItem(LOCAL_CLASSES_KEY, academicClass);
+    }
+
+    return academicClass;
+  };
+
+  const listAcademicClasses = async (filters?: { departmentId?: string; semesterId?: string }) => {
+    const institutionId = requireOrganizerInstitutionId();
+    const filterItems = (items: AcademicClass[]) => items
+      .filter((item) => item.institutionId === institutionId && (!filters?.departmentId || item.departmentId === filters.departmentId) && (!filters?.semesterId || item.semesterId === filters.semesterId))
+      .sort((a, b) => a.name.localeCompare(b.name));
+
+    try {
+      const snapshot = await getDocs(query(collection(db, "academicClasses"), where("institutionId", "==", institutionId)));
+      return filterItems(snapshot.docs.map((item) => ({ id: item.id, ...(item.data() as Omit<AcademicClass, "id">) })));
+    } catch {
+      return filterItems(readLocalItems<AcademicClass>(LOCAL_CLASSES_KEY));
+    }
+  };
+
+  const createSubject = async (input: Pick<AcademicSubject, "name" | "code" | "departmentId" | "semesterId">) => {
+    const institutionId = requireOrganizerInstitutionId();
+    const subjectRef = doc(collection(db, "academicSubjects"));
+    const subject: AcademicSubject = {
+      id: subjectRef.id,
+      name: input.name.trim(),
+      code: input.code.trim().toUpperCase(),
+      departmentId: input.departmentId,
+      semesterId: input.semesterId,
+      institutionId
+    };
+
+    try {
+      await setDoc(subjectRef, { ...subject, createdAt: serverTimestamp(), updatedAt: serverTimestamp() });
+    } catch {
+      upsertLocalItem(LOCAL_SUBJECTS_KEY, subject);
+    }
+
+    return subject;
+  };
+
+  const listSubjects = async (filters?: { departmentId?: string; semesterId?: string }) => {
+    const institutionId = requireOrganizerInstitutionId();
+    const filterItems = (items: AcademicSubject[]) => items
+      .filter((item) => item.institutionId === institutionId && (!filters?.departmentId || item.departmentId === filters.departmentId) && (!filters?.semesterId || item.semesterId === filters.semesterId))
+      .sort((a, b) => a.name.localeCompare(b.name));
+
+    try {
+      const snapshot = await getDocs(query(collection(db, "academicSubjects"), where("institutionId", "==", institutionId)));
+      return filterItems(snapshot.docs.map((item) => ({ id: item.id, ...(item.data() as Omit<AcademicSubject, "id">) })));
+    } catch {
+      return filterItems(readLocalItems<AcademicSubject>(LOCAL_SUBJECTS_KEY));
+    }
+  };
+
+  const allocateTeacher = async ({ teacherUserId, teacherEmail, departmentId, semesterId, classId, subjectId }: TeacherAllocationInput) => {
+    requireOrganizerInstitutionId();
+    const [classes, subjects] = await Promise.all([listAcademicClasses(), listSubjects()]);
+    const academicClass = classes.find((item) => item.id === classId);
+    const subject = subjects.find((item) => item.id === subjectId);
+
+    if (!academicClass || !subject) {
+      throw createAuthError("dc/unauthorized-access");
+    }
+
+    const existingTeacher = teacherUserId ? { id: teacherUserId, profile: null } : await findUserProfileByEmail(teacherEmail);
+    const teacherId = existingTeacher?.id || createLocalTeacherId(teacherEmail);
+
+    await setDoc(doc(db, "users", teacherId), {
+      id: teacherId,
+      email: teacherEmail.trim().toLowerCase(),
+      role: "teacher",
+      status: "active",
+      institution: user?.institution || DEFAULT_INSTITUTION,
+      institutionId: academicClass.institutionId,
+      departmentId,
+      department: academicClass.departmentName,
+      semesterId,
+      semester: academicClass.semesterName,
+      classroomId: classId,
+      classroomName: academicClass.name,
+      classSection: academicClass.section,
+      subjectId,
+      subject: subject.name,
+      updatedAt: serverTimestamp()
+    }, { merge: true });
+  };
+
+  const allocateStudent = async ({ studentId, departmentId, semesterId, classId, approve = false }: StudentAllocationInput & { approve?: boolean }) => {
+    requireOrganizerInstitutionId();
+    const academicClass = (await listAcademicClasses({ departmentId, semesterId })).find((item) => item.id === classId);
+
+    if (!academicClass) {
+      throw createAuthError("dc/class-code-invalid");
+    }
+
+    const allocationUpdate = {
+      status: approve ? "active" as const : "pending_approval" as const,
+      institution: user?.institution || DEFAULT_INSTITUTION,
+      institutionId: academicClass.institutionId,
+      departmentId,
+      department: academicClass.departmentName,
+      semesterId,
+      semester: academicClass.semesterName,
+      classroomId: classId,
+      classroomName: academicClass.name,
+      classSection: academicClass.section,
+      classJoinCode: academicClass.classCode,
+      updatedAt: serverTimestamp()
+    };
+
+    await updateDoc(doc(db, "users", studentId), approve ? {
+      ...allocationUpdate,
+      reviewedBy: user?.id,
+      reviewedAt: serverTimestamp()
+    } : allocationUpdate);
+  };
+
   const listPendingStudentRequests = async () => {
     if (!user || !["organizer", "teacher"].includes(user.role)) {
       throw createAuthError("dc/unauthorized-access");
@@ -1013,6 +1380,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           classJoinCode: student.classJoinCode || "",
           classroomId: student.classroomId,
           classroomName: student.classroomName,
+          departmentId: student.departmentId,
+          department: student.department,
+          semesterId: student.semesterId,
+          semester: student.semester,
           institutionId: student.institutionId,
           institution: student.institution || student.institutionName || DEFAULT_INSTITUTION,
           status: "pending_approval" as const,
@@ -1023,12 +1394,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const decideStudentRequest = async (studentId: string, decision: "approve" | "reject") => {
-    if (!user || !["organizer", "teacher"].includes(user.role)) {
+    if (!user || user.role !== "organizer") {
       throw createAuthError("dc/unauthorized-access");
     }
 
+    if (decision === "approve") {
+      throw new Error("Allocate Department, Semester, and Class before approving this student.");
+    }
+
     await updateDoc(doc(db, "users", studentId), {
-      status: decision === "approve" ? "active" : "rejected",
+      status: "rejected",
       reviewedBy: user.id,
       reviewedAt: serverTimestamp(),
       updatedAt: serverTimestamp()
@@ -1109,6 +1484,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         activateTeacherInvitation,
         getTeacherInvitation,
         listTeacherInvitations,
+        createDepartment,
+        listDepartments,
+        createSemester,
+        listSemesters,
+        createAcademicClass,
+        listAcademicClasses,
+        createSubject,
+        listSubjects,
+        allocateTeacher,
+        allocateStudent,
         listPendingStudentRequests,
         decideStudentRequest,
         updateOrganizationSettings,
