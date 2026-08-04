@@ -53,7 +53,7 @@ const TeacherInvitationPage: React.FC = () => {
         token: params.token,
         password: formData.password
       });
-      toast.success("Joined organization successfully.");
+      toast.success("Successfully joined the organization.");
       router.replace("/teacher/dashboard");
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : "Unable to activate invitation.");
@@ -63,13 +63,13 @@ const TeacherInvitationPage: React.FC = () => {
   return (
     <AuthShell
       title="Join organization"
-      description="Create your password to join your DigiClassroom organization."
+      description="Create a password, or enter your existing password if this Gmail is already registered."
       backLink={{ href: "/login", label: "Back to Sign In" }}
       sideContent={
         <div>
           <p className="text-sm font-semibold uppercase tracking-[0.22em] text-blue-100">Teacher Invitation</p>
           <h2 className="mt-4 text-4xl font-semibold leading-tight">Accept your invitation and enter the Teacher Dashboard.</h2>
-          <p className="mt-4 max-w-md text-base leading-7 text-blue-100/90">After activation, you will be sent to the Teacher Dashboard.</p>
+          <p className="mt-4 max-w-md text-base leading-7 text-blue-100/90">After joining, your teacher account opens the dashboard for the organization that invited you.</p>
         </div>
       }
     >
@@ -93,7 +93,7 @@ const TeacherInvitationPage: React.FC = () => {
             />
           </div>
           <div className="space-y-2">
-            <label className="block text-sm font-medium text-slate-700">Create Password</label>
+            <label className="block text-sm font-medium text-slate-700">Password</label>
             <div className="relative">
               <input
                 type={showPassword ? "text" : "password"}

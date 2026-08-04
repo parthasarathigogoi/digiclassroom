@@ -265,6 +265,10 @@ const updateLocalTeacherInvitation = (invitationId: string, updates: Partial<Tea
   );
 };
 
+const isFirebaseAuthCode = (error: unknown, code: string) => {
+  return typeof error === "object" && error !== null && "code" in error && String(error.code) === code;
+};
+
 const createLocalOrganizerUser = ({
   fullName,
   institutionName,
@@ -516,6 +520,21 @@ const findClassroomByJoinCode = async (classJoinCode: string) => {
   }
 
   throw createAuthError("dc/class-code-invalid");
+};
+
+const findUserProfileByEmail = async (email: string) => {
+  const usersQuery = query(collection(db, "users"), where("email", "==", email.trim().toLowerCase()), limit(1));
+  const userSnapshot = await getDocs(usersQuery);
+
+  if (userSnapshot.empty) {
+    return null;
+  }
+
+  const userDoc = userSnapshot.docs[0];
+  return {
+    id: userDoc.id,
+    profile: userDoc.data() as StoredProfile
+  };
 };
 
 export const getDashboardRouteByRole = (role?: UserRole | null) => {
@@ -797,12 +816,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     try {
       const invitation = await getTeacherInvitation(token);
       await setPersistence(auth, browserLocalPersistence);
-      const credential = await createUserWithEmailAndPassword(auth, invitation.email, password);
-      await updateProfile(credential.user, { displayName: invitation.teacherName });
+      const existingUserProfile = await findUserProfileByEmail(invitation.email);
+      let userId = existingUserProfile?.id || "";
 
       const nextUser: User = {
-        id: credential.user.uid,
-        name: invitation.teacherName,
+        id: userId,
+        name: existingUserProfile?.profile.name || invitation.teacherName,
         email: invitation.email,
         role: "teacher",
         status: "active",
@@ -812,16 +831,53 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         subject: invitation.subject
       };
 
-      await setDoc(doc(db, "users", credential.user.uid), {
+      if (existingUserProfile) {
+        await setDoc(doc(db, "users", existingUserProfile.id), {
+          ...nextUser,
+          id: existingUserProfile.id,
+          invitationId: invitation.id,
+          updatedAt: serverTimestamp()
+        }, { merge: true });
+
+        nextUser.id = existingUserProfile.id;
+
+        if (auth.currentUser) {
+          await signOut(auth);
+        }
+
+        startLocalSession(nextUser, true);
+      } else {
+        let firebaseUser: FirebaseUser;
+
+        try {
+          const credential = await createUserWithEmailAndPassword(auth, invitation.email, password);
+          firebaseUser = credential.user;
+        } catch (error) {
+          if (!isFirebaseAuthCode(error, "auth/email-already-in-use")) {
+            throw error;
+          }
+
+          const credential = await signInWithEmailAndPassword(auth, invitation.email, password);
+          firebaseUser = credential.user;
+        }
+
+        await updateProfile(firebaseUser, { displayName: invitation.teacherName });
+        nextUser.id = firebaseUser.uid;
+
+        await setDoc(doc(db, "users", firebaseUser.uid), {
         ...nextUser,
         invitationId: invitation.id,
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp()
-      });
+        }, { merge: true });
+
+        startLocalSession(nextUser, true);
+      }
+
       try {
         await updateDoc(doc(db, "teacherInvitations", invitation.id), {
           status: "accepted",
-          acceptedBy: credential.user.uid,
+          acceptedBy: nextUser.id,
           acceptedAt: serverTimestamp(),
           updatedAt: serverTimestamp()
         });
