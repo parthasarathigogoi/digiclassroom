@@ -272,6 +272,47 @@ const isFirebaseAuthCode = (error: unknown, code: string) => {
   return typeof error === "object" && error !== null && "code" in error && String(error.code) === code;
 };
 
+const encodeInvitationToken = (invitation: Omit<TeacherInvitation, "token">) => {
+  const payload = JSON.stringify({
+    id: invitation.id,
+    teacherName: invitation.teacherName,
+    email: invitation.email,
+    institutionId: invitation.institutionId,
+    institutionName: invitation.institutionName,
+    invitedBy: invitation.invitedBy,
+    nonce: createToken()
+  });
+
+  return btoa(payload).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
+};
+
+const decodeInvitationToken = (token: string): TeacherInvitation | null => {
+  try {
+    const base64 = token.replace(/-/g, "+").replace(/_/g, "/");
+    const paddedBase64 = base64.padEnd(base64.length + ((4 - (base64.length % 4)) % 4), "=");
+    const payload = JSON.parse(atob(paddedBase64)) as Partial<TeacherInvitation>;
+
+    if (!payload.id || !payload.teacherName || !payload.email || !payload.institutionId || !payload.institutionName || !payload.invitedBy) {
+      return null;
+    }
+
+    return {
+      id: payload.id,
+      token,
+      teacherName: payload.teacherName,
+      email: payload.email,
+      department: payload.department || "",
+      subject: payload.subject || "",
+      status: "pending",
+      institutionId: payload.institutionId,
+      institutionName: payload.institutionName,
+      invitedBy: payload.invitedBy
+    };
+  } catch {
+    return null;
+  }
+};
+
 const createLocalOrganizerUser = ({
   fullName,
   institutionName,
@@ -744,11 +785,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       throw createAuthError("dc/teacher-gmail-required");
     }
 
-    const token = createToken();
     const invitationRef = doc(collection(db, "teacherInvitations"));
-    const invitation: TeacherInvitation = {
+    const invitationWithoutToken: Omit<TeacherInvitation, "token"> = {
       id: invitationRef.id,
-      token,
       teacherName: teacherName.trim(),
       email: normalizedEmail,
       department: "",
@@ -757,6 +796,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       institutionId: user.institutionId || user.id,
       institutionName: user.institution || DEFAULT_INSTITUTION,
       invitedBy: user.id
+    };
+    const invitation: TeacherInvitation = {
+      ...invitationWithoutToken,
+      token: encodeInvitationToken(invitationWithoutToken)
     };
 
     try {
@@ -796,6 +839,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const getTeacherInvitation = async (token: string) => {
+    const localInvitation = readLocalTeacherInvitations().find((invitation) => invitation.token === token);
+
+    if (localInvitation) {
+      if (localInvitation.status === "accepted") {
+        throw createAuthError("dc/invitation-completed");
+      }
+
+      return localInvitation;
+    }
+
     try {
       const invitationQuery = query(collection(db, "teacherInvitations"), where("token", "==", token), limit(1));
       const invitationSnapshot = await getDocs(invitationQuery);
@@ -815,15 +868,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         throw error;
       }
 
-      const localInvitation = readLocalTeacherInvitations().find((invitation) => invitation.token === token);
+      // Firestore may be blocked for invited teachers; token decoding below keeps the setup page usable.
+    }
 
-      if (localInvitation) {
-        if (localInvitation.status === "accepted") {
-          throw createAuthError("dc/invitation-completed");
-        }
+    const tokenInvitation = decodeInvitationToken(token);
 
-        return localInvitation;
-      }
+    if (tokenInvitation) {
+      return tokenInvitation;
     }
 
     throw createAuthError("dc/invitation-invalid");
