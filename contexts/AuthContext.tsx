@@ -118,6 +118,7 @@ export type OrganizationSettingsInput = {
 
 type TeacherActivationInput = {
   token: string;
+  teacherName?: string;
   password: string;
 };
 
@@ -435,7 +436,9 @@ const getAuthErrorMessage = (error: unknown) => {
     case "dc/teacher-gmail-required":
       return "Teacher invitations must be sent to a Gmail address.";
     case "dc/invitation-invalid":
-      return "This invitation link is invalid or has already been used.";
+      return "Invalid or expired invitation link.";
+    case "dc/invitation-completed":
+      return "This invitation has already been completed.";
     case "dc/unauthorized-access":
       return "Unauthorized access. Please contact your Organizer.";
     case "dc/role-mismatch":
@@ -792,17 +795,31 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const getTeacherInvitation = async (token: string) => {
     try {
-      const invitationQuery = query(collection(db, "teacherInvitations"), where("token", "==", token), where("status", "==", "pending"), limit(1));
+      const invitationQuery = query(collection(db, "teacherInvitations"), where("token", "==", token), limit(1));
       const invitationSnapshot = await getDocs(invitationQuery);
 
       if (!invitationSnapshot.empty) {
         const invitationDoc = invitationSnapshot.docs[0];
-        return { id: invitationDoc.id, ...(invitationDoc.data() as Omit<TeacherInvitation, "id">) };
+        const invitation = { id: invitationDoc.id, ...(invitationDoc.data() as Omit<TeacherInvitation, "id">) };
+
+        if (invitation.status === "accepted") {
+          throw createAuthError("dc/invitation-completed");
+        }
+
+        return invitation;
       }
-    } catch {
-      const localInvitation = readLocalTeacherInvitations().find((invitation) => invitation.token === token && invitation.status === "pending");
+    } catch (error) {
+      if (isFirebaseAuthCode(error, "dc/invitation-completed")) {
+        throw error;
+      }
+
+      const localInvitation = readLocalTeacherInvitations().find((invitation) => invitation.token === token);
 
       if (localInvitation) {
+        if (localInvitation.status === "accepted") {
+          throw createAuthError("dc/invitation-completed");
+        }
+
         return localInvitation;
       }
     }
@@ -810,7 +827,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     throw createAuthError("dc/invitation-invalid");
   };
 
-  const activateTeacherInvitation = async ({ token, password }: TeacherActivationInput) => {
+  const activateTeacherInvitation = async ({ token, teacherName, password }: TeacherActivationInput) => {
     setIsLoading(true);
 
     try {
@@ -818,10 +835,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       await setPersistence(auth, browserLocalPersistence);
       const existingUserProfile = await findUserProfileByEmail(invitation.email);
       let userId = existingUserProfile?.id || "";
+      const displayName = teacherName?.trim() || existingUserProfile?.profile.name || invitation.teacherName;
 
       const nextUser: User = {
         id: userId,
-        name: existingUserProfile?.profile.name || invitation.teacherName,
+        name: displayName,
         email: invitation.email,
         role: "teacher",
         status: "active",
@@ -832,6 +850,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       };
 
       if (existingUserProfile) {
+        const credential = await signInWithEmailAndPassword(auth, invitation.email, password);
+        await updateProfile(credential.user, { displayName });
+
         await setDoc(doc(db, "users", existingUserProfile.id), {
           ...nextUser,
           id: existingUserProfile.id,
@@ -840,10 +861,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }, { merge: true });
 
         nextUser.id = existingUserProfile.id;
-
-        if (auth.currentUser) {
-          await signOut(auth);
-        }
 
         startLocalSession(nextUser, true);
       } else {
@@ -861,7 +878,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           firebaseUser = credential.user;
         }
 
-        await updateProfile(firebaseUser, { displayName: invitation.teacherName });
+        await updateProfile(firebaseUser, { displayName });
         nextUser.id = firebaseUser.uid;
 
         await setDoc(doc(db, "users", firebaseUser.uid), {

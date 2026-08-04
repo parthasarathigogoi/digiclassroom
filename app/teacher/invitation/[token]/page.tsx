@@ -15,6 +15,7 @@ const TeacherInvitationPage: React.FC = () => {
   const [isValidating, setIsValidating] = useState(true);
   const [errorMessage, setErrorMessage] = useState("");
   const [formData, setFormData] = useState({
+    teacherName: "",
     email: "",
     password: "",
     confirmPassword: ""
@@ -28,9 +29,9 @@ const TeacherInvitationPage: React.FC = () => {
   const loadInvitation = useCallback(async () => {
     try {
       const invitation = await getTeacherInvitationRef.current(params.token);
-      setFormData((current) => ({ ...current, email: invitation.email }));
+      setFormData((current) => ({ ...current, teacherName: invitation.teacherName, email: invitation.email }));
     } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : "Invalid invitation link.");
+      setErrorMessage(error instanceof Error ? error.message : "Invalid or expired invitation link.");
     } finally {
       setIsValidating(false);
     }
@@ -51,6 +52,7 @@ const TeacherInvitationPage: React.FC = () => {
     try {
       await activateTeacherInvitation({
         token: params.token,
+        teacherName: formData.teacherName,
         password: formData.password
       });
       toast.success("Successfully joined the organization.");
@@ -63,12 +65,12 @@ const TeacherInvitationPage: React.FC = () => {
   return (
     <AuthShell
       title="Join organization"
-      description="Create a password, or enter your existing password if this Gmail is already registered."
+      description="Create your password to join the organization that invited you."
       backLink={{ href: "/login", label: "Back to Sign In" }}
       sideContent={
         <div>
           <p className="text-sm font-semibold uppercase tracking-[0.22em] text-blue-100">Teacher Invitation</p>
-          <h2 className="mt-4 text-4xl font-semibold leading-tight">Accept your invitation and enter the Teacher Dashboard.</h2>
+          <h2 className="mt-4 text-4xl font-semibold leading-tight">Create your account and enter the Teacher Dashboard.</h2>
           <p className="mt-4 max-w-md text-base leading-7 text-blue-100/90">After joining, your teacher account opens the dashboard for the organization that invited you.</p>
         </div>
       }
@@ -84,7 +86,17 @@ const TeacherInvitationPage: React.FC = () => {
         <form onSubmit={handleSubmit} className="space-y-5">
           {errorMessage ? <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{errorMessage}</div> : null}
           <div className="space-y-2">
-            <label className="block text-sm font-medium text-slate-700">Gmail</label>
+            <label className="block text-sm font-medium text-slate-700">Teacher Name</label>
+            <input
+              type="text"
+              value={formData.teacherName}
+              onChange={(event) => setFormData({ ...formData, teacherName: event.target.value })}
+              className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 outline-none transition focus:border-blue-400 focus:ring-4 focus:ring-blue-100"
+              placeholder="Teacher name"
+            />
+          </div>
+          <div className="space-y-2">
+            <label className="block text-sm font-medium text-slate-700">Email Address</label>
             <input
               type="email"
               value={formData.email}
@@ -93,7 +105,7 @@ const TeacherInvitationPage: React.FC = () => {
             />
           </div>
           <div className="space-y-2">
-            <label className="block text-sm font-medium text-slate-700">Password</label>
+            <label className="block text-sm font-medium text-slate-700">Create Password</label>
             <div className="relative">
               <input
                 type={showPassword ? "text" : "password"}
