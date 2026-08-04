@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { BookOpen, Building2, Eye, EyeOff, GraduationCap, Loader2, LockKeyhole, Users, type LucideIcon } from "lucide-react";
@@ -59,7 +59,7 @@ const roleConfig: Record<UserRole, RoleConfig> = {
 const RoleLoginForm: React.FC<RoleLoginFormProps> = ({ role }) => {
   const config = roleConfig[role];
   const router = useRouter();
-  const { login, isLoading, user } = useAuth();
+  const { login, isLoading } = useAuth();
   const [showPassword, setShowPassword] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
   const [formData, setFormData] = useState({
@@ -67,12 +67,6 @@ const RoleLoginForm: React.FC<RoleLoginFormProps> = ({ role }) => {
     password: "",
     rememberMe: true
   });
-
-  useEffect(() => {
-    if (user) {
-      router.replace(getDashboardRouteByRole(user.role));
-    }
-  }, [router, user]);
 
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
