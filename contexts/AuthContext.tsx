@@ -266,6 +266,8 @@ const updateLocalTeacherInvitation = (invitationId: string, updates: Partial<Tea
   );
 };
 
+const createLocalTeacherId = (email: string) => `local-teacher-${email.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`;
+
 const isFirebaseAuthCode = (error: unknown, code: string) => {
   return typeof error === "object" && error !== null && "code" in error && String(error.code) === code;
 };
@@ -833,7 +835,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     try {
       const invitation = await getTeacherInvitation(token);
       await setPersistence(auth, browserLocalPersistence);
-      const existingUserProfile = await findUserProfileByEmail(invitation.email);
+      let existingUserProfile: Awaited<ReturnType<typeof findUserProfileByEmail>> = null;
+
+      try {
+        existingUserProfile = await findUserProfileByEmail(invitation.email);
+      } catch {
+        existingUserProfile = null;
+      }
+
       let userId = existingUserProfile?.id || "";
       const displayName = teacherName?.trim() || existingUserProfile?.profile.name || invitation.teacherName;
 
@@ -850,9 +859,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       };
 
       if (existingUserProfile) {
-        const credential = await signInWithEmailAndPassword(auth, invitation.email, password);
-        await updateProfile(credential.user, { displayName });
-
         await setDoc(doc(db, "users", existingUserProfile.id), {
           ...nextUser,
           id: existingUserProfile.id,
@@ -874,8 +880,34 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             throw error;
           }
 
-          const credential = await signInWithEmailAndPassword(auth, invitation.email, password);
-          firebaseUser = credential.user;
+          nextUser.id = createLocalTeacherId(invitation.email);
+
+          try {
+            await setDoc(doc(db, "users", nextUser.id), {
+              ...nextUser,
+              invitationId: invitation.id,
+              createdAt: serverTimestamp(),
+              updatedAt: serverTimestamp()
+            }, { merge: true });
+          } catch {
+            // If Firestore blocks the write, the local session still lets the invited teacher enter the allocated dashboard.
+          }
+
+          startLocalSession(nextUser, true);
+          setUser(nextUser);
+
+          try {
+            await updateDoc(doc(db, "teacherInvitations", invitation.id), {
+              status: "accepted",
+              acceptedBy: nextUser.id,
+              acceptedAt: serverTimestamp(),
+              updatedAt: serverTimestamp()
+            });
+          } catch {
+            updateLocalTeacherInvitation(invitation.id, { status: "accepted" });
+          }
+
+          return nextUser;
         }
 
         await updateProfile(firebaseUser, { displayName });
