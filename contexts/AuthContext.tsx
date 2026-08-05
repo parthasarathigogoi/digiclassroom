@@ -194,7 +194,10 @@ type StudentJoinRequestInput = {
   email: string;
   rollNumber: string;
   password: string;
-  classJoinCode: string;
+  departmentId: string;
+  semesterId: string;
+  classId: string;
+  classJoinCode?: string;
 };
 
 type TeacherInvitationInput = {
@@ -566,7 +569,12 @@ const buildUserFromProfile = (firebaseUser: FirebaseUser, profile?: StoredProfil
     classroomId: profile?.classroomId,
     classroomName: profile?.classroomName,
     department: profile?.department,
+    departmentId: profile?.departmentId,
+    semester: profile?.semester,
+    semesterId: profile?.semesterId,
+    classSection: profile?.classSection,
     subject: profile?.subject,
+    subjectId: profile?.subjectId,
     institutionType: profile?.institutionType
   };
 };
@@ -854,12 +862,27 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     email,
     rollNumber,
     password,
+    departmentId,
+    semesterId,
+    classId,
     classJoinCode
   }: StudentJoinRequestInput) => {
     setIsLoading(true);
 
     try {
-      const classroom = await findClassroomByJoinCode(classJoinCode);
+      const classes = await listAcademicClasses({ departmentId, semesterId });
+      const academicClass = classes.find((item) => item.id === classId);
+
+      if (!academicClass) {
+        throw createAuthError("dc/class-code-invalid");
+      }
+
+      const normalizedClassCode = classJoinCode?.trim().toUpperCase() || "";
+
+      if (normalizedClassCode && normalizedClassCode !== academicClass.classCode.toUpperCase()) {
+        throw createAuthError("dc/class-code-invalid");
+      }
+
       await setPersistence(auth, browserLocalPersistence);
       const credential = await createUserWithEmailAndPassword(auth, email, password);
       await updateProfile(credential.user, { displayName: fullName });
@@ -870,12 +893,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         email,
         role: "student",
         status: "pending_approval",
-        institution: classroom.institutionName || DEFAULT_INSTITUTION,
-        institutionId: classroom.institutionId,
-        classroomId: classroom.id,
-        classroomName: classroom.name || "Assigned Classroom",
+        institution: user?.institution || DEFAULT_INSTITUTION,
+        institutionId: academicClass.institutionId,
+        departmentId,
+        department: academicClass.departmentName,
+        semesterId,
+        semester: academicClass.semesterName,
+        classroomId: academicClass.id,
+        classroomName: academicClass.name,
+        classSection: academicClass.section,
         rollNumber,
-        classJoinCode: classJoinCode.trim().toUpperCase(),
+        classJoinCode: normalizedClassCode || academicClass.classCode,
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
         approvalRequestedAt: serverTimestamp()
@@ -1138,13 +1166,20 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const listDepartments = async () => {
-    const institutionId = requireOrganizerInstitutionId();
+    const institutionId = user?.institutionId || (user?.role === "organizer" ? user.id : undefined);
 
     try {
-      const snapshot = await getDocs(query(collection(db, "academicDepartments"), where("institutionId", "==", institutionId)));
-      return snapshot.docs.map((item) => ({ id: item.id, ...(item.data() as Omit<AcademicDepartment, "id">) })).sort((a, b) => a.name.localeCompare(b.name));
+      const departmentsQuery = institutionId
+        ? query(collection(db, "academicDepartments"), where("institutionId", "==", institutionId))
+        : query(collection(db, "academicDepartments"));
+      const snapshot = await getDocs(departmentsQuery);
+      return snapshot.docs
+        .map((item) => ({ id: item.id, ...(item.data() as Omit<AcademicDepartment, "id">) }))
+        .sort((a, b) => a.name.localeCompare(b.name));
     } catch {
-      return readLocalItems<AcademicDepartment>(LOCAL_DEPARTMENTS_KEY).filter((item) => item.institutionId === institutionId).sort((a, b) => a.name.localeCompare(b.name));
+      return readLocalItems<AcademicDepartment>(LOCAL_DEPARTMENTS_KEY)
+        .filter((item) => !institutionId || item.institutionId === institutionId)
+        .sort((a, b) => a.name.localeCompare(b.name));
     }
   };
 
@@ -1168,13 +1203,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const listSemesters = async (departmentId?: string) => {
-    const institutionId = requireOrganizerInstitutionId();
+    const institutionId = user?.institutionId || (user?.role === "organizer" ? user.id : undefined);
     const filterItems = (items: AcademicSemester[]) => items
-      .filter((item) => item.institutionId === institutionId && (!departmentId || item.departmentId === departmentId))
+      .filter((item) => (!institutionId || item.institutionId === institutionId) && (!departmentId || item.departmentId === departmentId))
       .sort((a, b) => a.name.localeCompare(b.name));
 
     try {
-      const snapshot = await getDocs(query(collection(db, "academicSemesters"), where("institutionId", "==", institutionId)));
+      const semestersQuery = institutionId
+        ? query(collection(db, "academicSemesters"), where("institutionId", "==", institutionId))
+        : query(collection(db, "academicSemesters"));
+      const snapshot = await getDocs(semestersQuery);
       return filterItems(snapshot.docs.map((item) => ({ id: item.id, ...(item.data() as Omit<AcademicSemester, "id">) })));
     } catch {
       return filterItems(readLocalItems<AcademicSemester>(LOCAL_SEMESTERS_KEY));
@@ -1227,13 +1265,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const listAcademicClasses = async (filters?: { departmentId?: string; semesterId?: string }) => {
-    const institutionId = requireOrganizerInstitutionId();
+    const institutionId = user?.institutionId || (user?.role === "organizer" ? user.id : undefined);
     const filterItems = (items: AcademicClass[]) => items
-      .filter((item) => item.institutionId === institutionId && (!filters?.departmentId || item.departmentId === filters.departmentId) && (!filters?.semesterId || item.semesterId === filters.semesterId))
+      .filter((item) => (!institutionId || item.institutionId === institutionId) && (!filters?.departmentId || item.departmentId === filters.departmentId) && (!filters?.semesterId || item.semesterId === filters.semesterId))
       .sort((a, b) => a.name.localeCompare(b.name));
 
     try {
-      const snapshot = await getDocs(query(collection(db, "academicClasses"), where("institutionId", "==", institutionId)));
+      const classesQuery = institutionId
+        ? query(collection(db, "academicClasses"), where("institutionId", "==", institutionId))
+        : query(collection(db, "academicClasses"));
+      const snapshot = await getDocs(classesQuery);
       return filterItems(snapshot.docs.map((item) => ({ id: item.id, ...(item.data() as Omit<AcademicClass, "id">) })));
     } catch {
       return filterItems(readLocalItems<AcademicClass>(LOCAL_CLASSES_KEY));
@@ -1262,13 +1303,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const listSubjects = async (filters?: { departmentId?: string; semesterId?: string }) => {
-    const institutionId = requireOrganizerInstitutionId();
+    const institutionId = user?.institutionId || (user?.role === "organizer" ? user.id : undefined);
     const filterItems = (items: AcademicSubject[]) => items
-      .filter((item) => item.institutionId === institutionId && (!filters?.departmentId || item.departmentId === filters.departmentId) && (!filters?.semesterId || item.semesterId === filters.semesterId))
+      .filter((item) => (!institutionId || item.institutionId === institutionId) && (!filters?.departmentId || item.departmentId === filters.departmentId) && (!filters?.semesterId || item.semesterId === filters.semesterId))
       .sort((a, b) => a.name.localeCompare(b.name));
 
     try {
-      const snapshot = await getDocs(query(collection(db, "academicSubjects"), where("institutionId", "==", institutionId)));
+      const subjectsQuery = institutionId
+        ? query(collection(db, "academicSubjects"), where("institutionId", "==", institutionId))
+        : query(collection(db, "academicSubjects"));
+      const snapshot = await getDocs(subjectsQuery);
       return filterItems(snapshot.docs.map((item) => ({ id: item.id, ...(item.data() as Omit<AcademicSubject, "id">) })));
     } catch {
       return filterItems(readLocalItems<AcademicSubject>(LOCAL_SUBJECTS_KEY));
