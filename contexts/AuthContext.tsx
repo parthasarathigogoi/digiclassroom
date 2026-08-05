@@ -460,7 +460,7 @@ const createLocalOrganizerUser = ({
   };
 };
 
-const loginWithLocalOrganizer = (email: string, password: string, rememberMe = true) => {
+const loginWithLocalOrganizer = (email: string, password: string, rememberMe = false) => {
   const normalizedEmail = email.trim().toLowerCase();
   const account = readLocalOrganizerAccounts().find((item) => item.user.email.toLowerCase() === normalizedEmail);
 
@@ -738,7 +738,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return () => unsubscribe();
   }, []);
 
-  const login = async (email: string, password: string, rememberMe = true, expectedRole?: UserRole) => {
+  const login = async (email: string, password: string, rememberMe = false, expectedRole?: UserRole) => {
     setIsLoading(true);
 
     try {

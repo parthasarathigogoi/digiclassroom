@@ -35,9 +35,6 @@ const features = [
   }
 ];
 
-const testimonials: Array<{ name: string; role: string; text: string }> = [];
-const faqItems: Array<{ question: string; answer: string }> = [];
-
 function Icon({ path }: { path: string }) {
   return (
     <svg viewBox="0 0 24 24" className="h-6 w-6" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -81,13 +78,13 @@ export default function Home() {
           </p>
           <div className="mt-8 flex flex-col gap-3 sm:flex-row">
             <a href="/register" className="rounded-full bg-ocean px-6 py-3 text-sm font-bold text-white shadow-xl shadow-blue-500/25 transition hover:-translate-y-0.5 hover:bg-blue-700">Start Free Trial</a>
-            <a href="/login" className="rounded-full border border-slate-200 bg-white px-6 py-3 text-sm font-bold text-ink shadow-sm transition hover:-translate-y-0.5 hover:border-ocean hover:text-ocean">Book a Demo</a>
+            <a href="/login" className="rounded-full border border-slate-200 bg-white px-6 py-3 text-sm font-bold text-ink shadow-sm transition hover:-translate-y-0.5 hover:border-ocean hover:text-ocean">Sign In</a>
           </div>
         </motion.div>
 
         <motion.div initial={{ opacity: 0, scale: 0.96 }} animate={{ opacity: 1, scale: 1 }} transition={{ duration: 0.7, delay: 0.1 }} className="relative">
           <div className="rounded-[2rem] border border-slate-200 bg-white p-8 shadow-soft flex items-center justify-center h-80">
-            <p className="text-slate-500 text-center">Dashboard preview coming soon</p>
+            <p className="text-slate-500 text-center">Create an organization to configure your dashboard.</p>
           </div>
         </motion.div>
       </section>
@@ -119,45 +116,6 @@ export default function Home() {
         </div>
       </section>
 
-      <section className="px-5 py-20 sm:px-8">
-        <div className="mx-auto max-w-7xl">
-          <div className="text-center max-w-2xl mx-auto">
-            <p className="text-sm font-bold uppercase tracking-[0.2em] text-ocean">Screenshots</p>
-            <h2 className="mt-3 text-3xl font-black tracking-tight text-ink sm:text-5xl">See DigiClassroom in action.</h2>
-          </div>
-          <div className="mt-10 grid gap-6 md:grid-cols-2">
-            <motion.div
-              initial={{ opacity: 0, x: -20 }}
-              whileInView={{ opacity: 1, x: 0 }}
-              viewport={{ once: true }}
-              transition={{ duration: 0.6 }}
-              className="rounded-3xl border border-slate-200 bg-white p-4 shadow-soft"
-            >
-              <div className="rounded-2xl bg-blue-50 h-64 flex items-center justify-center">
-                <div className="text-center">
-                  <Icon path="M5 6.5A2.5 2.5 0 0 1 7.5 4H19v13.5A2.5 2.5 0 0 1 16.5 20H7.5A2.5 2.5 0 0 1 5 17.5v-11ZM8 8h8M8 12h7M8 16h5" />
-                  <p className="mt-2 text-ocean font-bold">Classroom Dashboard</p>
-                </div>
-              </div>
-            </motion.div>
-            <motion.div
-              initial={{ opacity: 0, x: 20 }}
-              whileInView={{ opacity: 1, x: 0 }}
-              viewport={{ once: true }}
-              transition={{ duration: 0.6, delay: 0.1 }}
-              className="rounded-3xl border border-slate-200 bg-white p-4 shadow-soft"
-            >
-              <div className="rounded-2xl bg-green-50 h-64 flex items-center justify-center">
-                <div className="text-center">
-                  <Icon path="M12 3a9 9 0 1 0 9 9M12 7v5l3 2M4 4l3 3M20 4l-3 3" />
-                  <p className="mt-2 text-mint font-bold">Online Exam Portal</p>
-                </div>
-              </div>
-            </motion.div>
-          </div>
-        </div>
-      </section>
-
       <section id="ai" className="px-5 py-20 sm:px-8">
         <div className="mx-auto grid max-w-7xl gap-8 rounded-[2rem] bg-ink p-6 text-white shadow-soft md:grid-cols-[0.9fr_1.1fr] md:p-10">
           <div>
@@ -175,34 +133,10 @@ export default function Home() {
         </div>
       </section>
 
-      <section className="px-5 py-20 sm:px-8">
-        <div className="mx-auto max-w-7xl">
-          <div className="text-center max-w-2xl mx-auto">
-            <p className="text-sm font-bold uppercase tracking-[0.2em] text-ocean">Testimonials</p>
-            <h2 className="mt-3 text-3xl font-black tracking-tight text-ink sm:text-5xl">Loved by educators and students.</h2>
-          </div>
-          <div className="mt-10 rounded-3xl border border-dashed border-slate-300 bg-white p-12 text-center">
-            <p className="text-slate-500">Testimonials coming soon</p>
-          </div>
-        </div>
-      </section>
-
-      <section id="faq" className="bg-white px-5 py-20 sm:px-8">
-        <div className="mx-auto max-w-3xl">
-          <div className="text-center">
-            <p className="text-sm font-bold uppercase tracking-[0.2em] text-ocean">FAQ</p>
-            <h2 className="mt-3 text-3xl font-black tracking-tight text-ink sm:text-5xl">Got questions? We&apos;ve got answers.</h2>
-          </div>
-          <div className="mt-10 rounded-3xl border border-dashed border-slate-300 bg-white p-12 text-center">
-            <p className="text-slate-500">FAQ coming soon</p>
-          </div>
-        </div>
-      </section>
-
       <section id="contact" className="px-5 py-20 sm:px-8">
         <div className="mx-auto max-w-4xl rounded-[2rem] bg-ink p-8 text-white text-center shadow-soft">
           <h2 className="text-3xl font-black sm:text-5xl">Ready to get started?</h2>
-          <p className="mt-4 text-blue-100 text-lg">Join thousands of institutions already using DigiClassroom.</p>
+          <p className="mt-4 text-blue-100 text-lg">Create your organization workspace and configure real academic allocations.</p>
           <div className="mt-8 flex flex-col gap-3 sm:flex-row justify-center">
             <button className="rounded-full bg-ocean px-8 py-4 text-sm font-bold text-white shadow-xl shadow-blue-500/25 transition hover:-translate-y-0.5 hover:bg-blue-700">Start Free Trial</button>
             <button className="rounded-full border border-white/30 bg-white/10 px-8 py-4 text-sm font-bold text-white transition hover:-translate-y-0.5 hover:bg-white/20">Contact Sales</button>

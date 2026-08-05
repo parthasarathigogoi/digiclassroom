@@ -1,5 +1,5 @@
 "use client";
-import React, { useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Building2, Eye, EyeOff, Loader2, LockKeyhole, PanelsTopLeft } from "lucide-react";
@@ -9,21 +9,29 @@ import { toast } from "sonner";
 
 const LoginPage: React.FC = () => {
   const router = useRouter();
-  const { login, isLoading } = useAuth();
+  const { login, logout, isLoading } = useAuth();
+  const logoutRef = useRef(logout);
   const [showPassword, setShowPassword] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
   const [formData, setFormData] = useState({
     email: "",
-    password: "",
-    rememberMe: true
+    password: ""
   });
+
+  useEffect(() => {
+    logoutRef.current = logout;
+  }, [logout]);
+
+  useEffect(() => {
+    void logoutRef.current();
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
     try {
       setErrorMessage("");
-      const signedInUser = await login(formData.email, formData.password, formData.rememberMe);
+      const signedInUser = await login(formData.email, formData.password, false);
       toast.success("Login successful!");
       router.replace(getDashboardRouteByRole(signedInUser.role));
     } catch (error) {
@@ -62,7 +70,7 @@ const LoginPage: React.FC = () => {
               {
                 icon: LockKeyhole,
                 title: "Secure sessions",
-                text: "Remember Me keeps trusted organizer sessions available across visits."
+                text: "Every login starts from credentials so accounts are not selected automatically."
               }
             ].map((item) => (
               <div key={item.title} className="rounded-3xl border border-white/15 bg-white/10 p-5 backdrop-blur-sm">
@@ -126,17 +134,7 @@ const LoginPage: React.FC = () => {
           </div>
         </div>
 
-        <div className="flex flex-col gap-3 text-sm text-slate-600 sm:flex-row sm:items-center sm:justify-between">
-          <label className="inline-flex items-center gap-3">
-            <input
-              type="checkbox"
-              checked={formData.rememberMe}
-              onChange={(e) => setFormData({ ...formData, rememberMe: e.target.checked })}
-              className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
-            />
-            <span>Remember me</span>
-          </label>
-
+        <div className="flex justify-end text-sm text-slate-600">
           <Link href="/forgot-password" className="font-medium text-blue-700 transition hover:text-blue-800 hover:underline">
             Forgot password?
           </Link>

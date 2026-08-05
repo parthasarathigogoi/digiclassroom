@@ -20,7 +20,7 @@ const PlaceholderPage: React.FC<PlaceholderPageProps> = ({ title, description })
       </div>
       <h1 className="text-3xl font-bold text-ink mb-2">{title}</h1>
       <p className="text-slate-600 max-w-md">
-        {description || "This feature is coming soon. Stay tuned!"}
+        {description || "No records are available for this section yet."}
       </p>
     </motion.div>
   );

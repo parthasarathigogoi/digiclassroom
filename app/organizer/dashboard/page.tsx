@@ -6,33 +6,30 @@ import {
   Activity,
   BarChart3,
   BookOpen,
-  CalendarCheck,
   ClipboardList,
   GraduationCap,
   MailPlus,
   Presentation,
   UserCheck,
-  Users,
-  Video
+  Users
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 
 const OrganizerDashboardPage: React.FC = () => {
   const { user } = useAuth();
   const stats = [
-    { icon: GraduationCap, label: "Total Students", value: "1,248", detail: "+84 this month", color: "bg-blue-100 text-blue-700" },
-    { icon: Users, label: "Total Teachers", value: "64", detail: "12 departments", color: "bg-emerald-100 text-emerald-700" },
-    { icon: Presentation, label: "Total Classes", value: "38", detail: "6 active batches", color: "bg-cyan-100 text-cyan-700" },
-    { icon: BookOpen, label: "Total Subjects", value: "112", detail: "Mapped to classes", color: "bg-violet-100 text-violet-700" },
-    { icon: ClipboardList, label: "Active Assignments", value: "27", detail: "9 due this week", color: "bg-amber-100 text-amber-700" },
-    { icon: BarChart3, label: "Scheduled Exams", value: "14", detail: "Next: Friday", color: "bg-rose-100 text-rose-700" },
-    { icon: Video, label: "Live Classes Today", value: "8", detail: "3 running now", color: "bg-indigo-100 text-indigo-700" },
-    { icon: CalendarCheck, label: "Attendance Percentage", value: "92%", detail: "+3% vs last week", color: "bg-teal-100 text-teal-700" }
+    { icon: GraduationCap, label: "Total Students", value: "0", detail: "No approved students yet", color: "bg-blue-100 text-blue-700" },
+    { icon: Users, label: "Total Teachers", value: "0", detail: "No allocated teachers yet", color: "bg-emerald-100 text-emerald-700" },
+    { icon: Presentation, label: "Total Classes", value: "0", detail: "No classes created yet", color: "bg-cyan-100 text-cyan-700" },
+    { icon: BookOpen, label: "Total Subjects", value: "0", detail: "No subjects assigned yet", color: "bg-violet-100 text-violet-700" },
+    { icon: ClipboardList, label: "Active Assignments", value: "0", detail: "No assignments created yet", color: "bg-amber-100 text-amber-700" },
+    { icon: BarChart3, label: "Scheduled Exams", value: "0", detail: "No examinations scheduled yet", color: "bg-rose-100 text-rose-700" }
   ];
   const workflows = [
-    { href: "/organizer/teachers", icon: MailPlus, title: "Invite Teachers", text: "Add Gmail-based teacher invitations and assign departments or subjects." },
-    { href: "/organizer/students", icon: UserCheck, title: "Approve Students", text: "Review join-code requests before students access classroom content." },
-    { href: "/organizer/classes", icon: Presentation, title: "Create Classes", text: "Set up sections and class join codes for teacher-managed onboarding." },
+    { href: "/organizer/departments", icon: Activity, title: "Create Departments", text: "Build the academic structure before allocating classes, teachers, and students." },
+    { href: "/organizer/classes", icon: Presentation, title: "Create Classes", text: "Create real sections with unique class codes under departments and semesters." },
+    { href: "/organizer/teachers", icon: MailPlus, title: "Invite Teachers", text: "Invite teachers and allocate department, semester, class, and subject." },
+    { href: "/organizer/students/pending", icon: UserCheck, title: "Approve Students", text: "Allocate department, semester, and class before approval." },
     { href: "/organizer/settings", icon: Activity, title: "Configure Organization", text: "Update profile, branding, notifications, and security settings." }
   ];
 
@@ -82,7 +79,7 @@ const OrganizerDashboardPage: React.FC = () => {
           <h2 className="mt-3 text-2xl font-black">{user?.institution || "DigiClassroom"}</h2>
           <p className="mt-2 text-sm leading-6 text-slate-300">Organization is active. No external approval is required for setup, configuration, teacher invitations, or student approvals.</p>
           <div className="mt-6 space-y-3 text-sm">
-            {["Organization workspace created", "Organizer account active", "Teacher invitation flow enabled", "Student approval queue ready"].map((item) => (
+            {["Organizer account active", "Academic allocation required", "No seeded records loaded", "Student approval requires allocation"].map((item) => (
               <div key={item} className="flex items-center gap-3 rounded-2xl bg-white/10 px-4 py-3">
                 <span className="h-2.5 w-2.5 rounded-full bg-emerald-300" />
                 <span>{item}</span>

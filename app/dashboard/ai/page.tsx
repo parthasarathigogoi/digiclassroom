@@ -6,7 +6,7 @@ const AIPage: React.FC = () => {
   return (
     <PlaceholderPage
       title="AI Assistant"
-      description="Your AI-powered learning companion coming soon"
+      description="No AI assistant records are available for this workspace yet."
     />
   );
 };

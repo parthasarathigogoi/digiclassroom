@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { BookOpen, Building2, Eye, EyeOff, GraduationCap, Loader2, LockKeyhole, Users, type LucideIcon } from "lucide-react";
@@ -59,21 +59,29 @@ const roleConfig: Record<UserRole, RoleConfig> = {
 const RoleLoginForm: React.FC<RoleLoginFormProps> = ({ role }) => {
   const config = roleConfig[role];
   const router = useRouter();
-  const { login, isLoading } = useAuth();
+  const { login, logout, isLoading } = useAuth();
+  const logoutRef = useRef(logout);
   const [showPassword, setShowPassword] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
   const [formData, setFormData] = useState({
     email: "",
-    password: "",
-    rememberMe: true
+    password: ""
   });
+
+  useEffect(() => {
+    logoutRef.current = logout;
+  }, [logout]);
+
+  useEffect(() => {
+    void logoutRef.current();
+  }, []);
 
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
 
     try {
       setErrorMessage("");
-      const signedInUser = await login(formData.email, formData.password, formData.rememberMe, role);
+      const signedInUser = await login(formData.email, formData.password, false, role);
       toast.success(`${config.title} successful.`);
       router.replace(getDashboardRouteByRole(signedInUser.role));
     } catch (error) {
@@ -190,17 +198,7 @@ const RoleLoginForm: React.FC<RoleLoginFormProps> = ({ role }) => {
           </div>
         </div>
 
-        <div className="flex flex-col gap-3 text-sm text-slate-600 sm:flex-row sm:items-center sm:justify-between">
-          <label className="inline-flex items-center gap-3">
-            <input
-              type="checkbox"
-              checked={formData.rememberMe}
-              onChange={(event) => setFormData({ ...formData, rememberMe: event.target.checked })}
-              className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
-            />
-            <span>Remember me</span>
-          </label>
-
+        <div className="flex justify-end text-sm text-slate-600">
           <Link href="/forgot-password" className="font-medium text-blue-700 transition hover:text-blue-800 hover:underline">
             Forgot password?
           </Link>
