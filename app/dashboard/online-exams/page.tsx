@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { AlertTriangle, BarChart3, Bell, CheckCircle2, ChevronLeft, ChevronRight, Clock, Download, FileText, Laptop, Loader2, Save, ShieldCheck, User } from "lucide-react";
+import { AlertTriangle, BarChart3, Bell, CheckCircle2, ChevronLeft, ChevronRight, Clock, FileText, Laptop, Loader2, Save, ShieldCheck, User } from "lucide-react";
 import { collection, doc, getDocs, query, serverTimestamp, setDoc, where } from "firebase/firestore";
 import { toast } from "sonner";
 import { canAccessAllocationScope, useAuth } from "@/contexts/AuthContext";

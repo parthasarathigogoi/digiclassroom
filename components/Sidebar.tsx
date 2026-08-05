@@ -14,6 +14,7 @@ import {
   BarChart3,
   Sparkles,
   Bell,
+  CheckCircle2,
   Settings,
   Menu,
   X,
@@ -22,6 +23,7 @@ import {
   Laptop,
   Calendar,
   CalendarDays,
+  Clock,
   Target,
   Library,
   FileCheck,
@@ -58,6 +60,7 @@ const navItems = [
 const organizerNavItems = [
   { icon: LayoutDashboard, label: "Dashboard", href: "/organizer/dashboard" },
   { icon: Building2, label: "Departments", href: "/organizer/departments" },
+  { icon: CalendarDays, label: "Semesters", href: "/organizer/departments" },
   { icon: Users, label: "Teachers", href: "/organizer/teachers" },
   { icon: GraduationCap, label: "Students", href: "/organizer/students" },
   { icon: Building2, label: "Classes", href: "/organizer/classes" },
@@ -76,7 +79,6 @@ const organizerNavItems = [
 
 const teacherNavItems = [
   { icon: LayoutDashboard, label: "Dashboard", href: "/teacher/dashboard" },
-  { icon: CalendarDays, label: "Today's Classes", href: "/dashboard/live-classes" },
   { icon: Users, label: "My Classes", href: "/dashboard/classrooms" },
   { icon: BookOpen, label: "Study Materials", href: "/dashboard/study-materials" },
   { icon: FileText, label: "Assignments", href: "/dashboard/assignments" },
@@ -90,12 +92,27 @@ const teacherNavItems = [
   { icon: Settings, label: "Settings", href: "/dashboard/settings" }
 ];
 
+const studentNavItems = [
+  { icon: LayoutDashboard, label: "Dashboard", href: "/student/dashboard" },
+  { icon: BookOpen, label: "My Subjects", href: "/dashboard/subjects" },
+  { icon: Library, label: "Study Materials", href: "/dashboard/study-materials" },
+  { icon: FileText, label: "Assignments", href: "/dashboard/assignments" },
+  { icon: Laptop, label: "Upcoming Exams", href: "/dashboard/online-exams" },
+  { icon: Clock, label: "Ongoing Exams", href: "/dashboard/online-exams" },
+  { icon: CheckCircle2, label: "Completed Exams", href: "/dashboard/online-exams" },
+  { icon: Award, label: "Results", href: "/dashboard/results" },
+  { icon: BarChart3, label: "Performance Reports", href: "/dashboard/analytics" },
+  { icon: FileCheck, label: "Attendance", href: "/dashboard/attendance" },
+  { icon: Bell, label: "Notifications", href: "/dashboard/notifications" },
+  { icon: User, label: "Profile", href: "/dashboard/profile" }
+];
+
 const Sidebar: React.FC = () => {
   const pathname = usePathname();
   const { user, logout } = useAuth();
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [isMobileOpen, setIsMobileOpen] = useState(false);
-  const visibleNavItems = user?.role === "organizer" ? organizerNavItems : user?.role === "teacher" ? teacherNavItems : navItems;
+  const visibleNavItems = user?.role === "organizer" ? organizerNavItems : user?.role === "teacher" ? teacherNavItems : user?.role === "student" ? studentNavItems : navItems;
 
   return (
     <>
