@@ -174,12 +174,22 @@ const QuestionBankPage: React.FC = () => {
   const [bulkText, setBulkText] = useState("");
   const [draft, setDraft] = useState<QuestionDraft>(emptyDraft(null));
   const [search, setSearch] = useState("");
-  const [filters, setFilters] = useState<{ type: QuestionType | ""; difficulty: DifficultyLevel | ""; subjectId: string; chapter: string; topic: string }>({
+  const [filters, setFilters] = useState<{
+    type: QuestionType | "";
+    difficulty: DifficultyLevel | "";
+    subjectId: string;
+    chapter: string;
+    topic: string;
+    departmentId: string;
+    semesterId: string;
+  }>({
     type: "",
     difficulty: "",
     subjectId: "",
     chapter: "",
-    topic: ""
+    topic: "",
+    departmentId: "",
+    semesterId: ""
   });
   const loaderRefs = useRef({ listDepartments, listSemesters, listAcademicClasses, listSubjects });
 
@@ -226,8 +236,14 @@ const QuestionBankPage: React.FC = () => {
     );
   }, [subjects, filters.departmentId, filters.semesterId]);
 
-  const chapters = useMemo(() => Array.from(new Set(questions.map((q) => q.chapter).filter(Boolean))).sort(), [questions]);
-  const topics = useMemo(() => Array.from(new Set(questions.map((q) => q.topic).filter(Boolean))).sort(), [questions]);
+  const chapters = useMemo(
+    () => Array.from(new Set(questions.map((q) => q.chapter).filter((chapter): chapter is string => Boolean(chapter)))).sort(),
+    [questions]
+  );
+  const topics = useMemo(
+    () => Array.from(new Set(questions.map((q) => q.topic).filter((topic): topic is string => Boolean(topic)))).sort(),
+    [questions]
+  );
 
   const filtered = useMemo(() => {
     return questions.filter((q) => {

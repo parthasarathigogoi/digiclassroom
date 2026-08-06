@@ -279,12 +279,28 @@ const PracticeCenterPage: React.FC = () => {
     void loadBank();
   }, [loadBank]);
 
-  const availableSubjects = useMemo(
-    () => Array.from(new Map(allQuestions.map((q) => [q.subjectId, { id: q.subjectId, name: q.subject }])).values()).filter((s) => s.id),
-    [allQuestions]
-  );
+  const availableSubjects = useMemo(() => {
+    const seen = new Map<string, { id: string; name: string | undefined }>();
+
+    allQuestions.forEach((q) => {
+      if (!q.subjectId) return;
+      if (!seen.has(q.subjectId)) {
+        seen.set(q.subjectId, { id: q.subjectId, name: q.subject });
+      }
+    });
+
+    return Array.from(seen.values());
+  }, [allQuestions]);
   const chaptersForSubject = useMemo(
-    () => Array.from(new Set(allQuestions.filter((q) => !config.subjectId || q.subjectId === config.subjectId).map((q) => q.chapter).filter(Boolean))).sort(),
+    () =>
+      Array.from(
+        new Set(
+          allQuestions
+            .filter((q) => !config.subjectId || q.subjectId === config.subjectId)
+            .map((q) => q.chapter)
+            .filter((chapter): chapter is string => Boolean(chapter))
+        )
+      ).sort(),
     [allQuestions, config.subjectId]
   );
   const topicsForSelection = useMemo(() => {
@@ -293,7 +309,9 @@ const PracticeCenterPage: React.FC = () => {
       if (config.chapter && q.chapter !== config.chapter) return false;
       return true;
     });
-    return Array.from(new Set(filtered.map((q) => q.topic).filter(Boolean))).sort();
+    return Array.from(
+      new Set(filtered.map((q) => q.topic).filter((topic): topic is string => Boolean(topic)))
+    ).sort();
   }, [allQuestions, config.subjectId, config.chapter]);
 
   const countsBySubject = useMemo(() => {
