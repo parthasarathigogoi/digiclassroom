@@ -1,0 +1,287 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function userId() {
+      return request.auth.uid;
+    }
+
+    function userEmail() {
+      return request.auth.token.email;
+    }
+
+    function getUserDoc() {
+      return get(/databases/$(database)/documents/users/$(userId()));
+    }
+
+    function userRole() {
+      return signedIn() && getUserDoc().data.role in ['organizer', 'teacher', 'student']
+        ? getUserDoc().data.role
+        : '';
+    }
+
+    function userInstitutionId() {
+      if (!signedIn()) return '';
+      let u = getUserDoc().data;
+      return u.institutionId is string && u.institutionId != ''
+        ? u.institutionId
+        : (u.role == 'organizer' ? userId() : '');
+    }
+
+    function sameInstitution(field) {
+      return resource.data[field] == userInstitutionId()
+        || resource.data[field] == userId()
+        || (request.resource != null && request.resource.data[field] == userInstitutionId())
+        || (request.resource != null && request.resource.data[field] == userId());
+    }
+
+    function writeSameInstitution(field) {
+      return request.resource != null && (
+        request.resource.data[field] == userInstitutionId()
+        || request.resource.data[field] == userId()
+      );
+    }
+
+    function isOrganizer() {
+      return userRole() == 'organizer';
+    }
+
+    function isTeacher() {
+      return userRole() == 'teacher';
+    }
+
+    function isStudent() {
+      return userRole() == 'student';
+    }
+
+    function userDepartmentId() {
+      let u = getUserDoc().data;
+      return u.departmentId is string ? u.departmentId : '';
+    }
+
+    function userSemesterId() {
+      let u = getUserDoc().data;
+      return u.semesterId is string ? u.semesterId : '';
+    }
+
+    function userClassroomId() {
+      let u = getUserDoc().data;
+      return u.classroomId is string ? u.classroomId : '';
+    }
+
+    function userSubjectId() {
+      let u = getUserDoc().data;
+      return u.subjectId is string ? u.subjectId : '';
+    }
+
+    match /users/{uid} {
+      allow read: if signedIn() && (uid == userId() || isOrganizer());
+      allow create, update: if signedIn() && (
+        (uid == userId()) ||
+        (isOrganizer() && writeSameInstitution('institutionId'))
+      );
+      allow delete: if isOrganizer();
+    }
+
+    match /institutions/{institutionId} {
+      allow read: if signedIn() && (
+        isOrganizer() && (institutionId == userId() || institutionId == userInstitutionId()) ||
+        (institutionId == userInstitutionId())
+      );
+      allow create, update, delete: if isOrganizer() && (
+        institutionId == userId() || institutionId == userInstitutionId()
+      );
+    }
+
+    match /academicDepartments/{docId} {
+      allow read: if signedIn() && (
+        isOrganizer() && (resource.data.institutionId == userInstitutionId() || resource.data.institutionId == userId()) ||
+        (isTeacher() || isStudent()) && resource.data.id == userDepartmentId() ||
+        (isTeacher() || isStudent()) && resource.data.institutionId == userInstitutionId()
+      );
+      allow list: if signedIn() && (
+        isOrganizer() || (isTeacher() || isStudent())
+      );
+      allow create, update, delete: if isOrganizer() && writeSameInstitution('institutionId');
+    }
+
+    match /academicSemesters/{docId} {
+      allow read, list: if signedIn() && (
+        isOrganizer() ||
+        ((isTeacher() || isStudent()) && resource.data.departmentId == userDepartmentId())
+      );
+      allow create, update, delete: if isOrganizer() && writeSameInstitution('institutionId');
+    }
+
+    match /academicClasses/{docId} {
+      allow read, list: if signedIn() && (
+        isOrganizer() ||
+        ((isTeacher() || isStudent()) && (
+          resource.data.id == userClassroomId() ||
+          (resource.data.departmentId == userDepartmentId() && resource.data.semesterId == userSemesterId())
+        ))
+      );
+      allow create, update, delete: if isOrganizer() && writeSameInstitution('institutionId');
+    }
+
+    match /academicSubjects/{docId} {
+      allow read, list: if signedIn() && (
+        isOrganizer() ||
+        ((isTeacher() || isStudent()) && (
+          resource.data.id == userSubjectId() ||
+          (resource.data.departmentId == userDepartmentId() && resource.data.semesterId == userSemesterId())
+        ))
+      );
+      allow create, update, delete: if isOrganizer() && writeSameInstitution('institutionId');
+    }
+
+    match /classrooms/{docId} {
+      allow read, list: if signedIn() && (
+        isOrganizer() ||
+        ((isTeacher() || isStudent()) && (
+          resource.data.id == userClassroomId() ||
+          resource.data.joinCode is string
+        ))
+      );
+      allow create, update, delete: if isOrganizer() && writeSameInstitution('institutionId');
+    }
+
+    match /questionBank/{docId} {
+      allow read, list: if signedIn() && (
+        isOrganizer() && (resource.data.institutionId == userInstitutionId() || resource.data.institutionId == userId()) ||
+        (isTeacher() && (
+          resource.data.subjectId == userSubjectId() ||
+          resource.data.createdBy == userId()
+        )) ||
+        (isStudent() && (
+          resource.data.departmentId == userDepartmentId() &&
+          resource.data.semesterId == userSemesterId() &&
+          resource.data.classroomId == userClassroomId() &&
+          resource.data.subjectId == userSubjectId()
+        ))
+      );
+      allow create: if signedIn() && (
+        (isOrganizer() && writeSameInstitution('institutionId')) ||
+        (isTeacher() && writeSameInstitution('institutionId') && (
+          request.resource.data.subjectId == userSubjectId()
+        ))
+      );
+      allow update, delete: if signedIn() && (
+        isOrganizer() ||
+        (isTeacher() && (resource.data.createdBy == userId() || resource.data.subjectId == userSubjectId()))
+      );
+    }
+
+    match /assignments/{docId} {
+      allow read, list: if signedIn() && (
+        isOrganizer() ||
+        (isTeacher() && (resource.data.createdBy == userId() || resource.data.subjectId == userSubjectId())) ||
+        (isStudent() && (
+          resource.data.departmentId == userDepartmentId() &&
+          resource.data.semesterId == userSemesterId() &&
+          resource.data.classroomId == userClassroomId() &&
+          resource.data.subjectId == userSubjectId()
+        ))
+      );
+      allow create: if signedIn() && (
+        isOrganizer() && writeSameInstitution('institutionId') ||
+        (isTeacher() && writeSameInstitution('institutionId') && request.resource.data.subjectId == userSubjectId())
+      );
+      allow update, delete: if signedIn() && (
+        isOrganizer() ||
+        (isTeacher() && (resource.data.createdBy == userId() || resource.data.subjectId == userSubjectId()))
+      );
+    }
+
+    match /studyMaterials/{docId} {
+      allow read, list: if signedIn() && (
+        isOrganizer() ||
+        (isTeacher() && (resource.data.createdBy == userId() || resource.data.subjectId == userSubjectId())) ||
+        (isStudent() && (
+          resource.data.departmentId == userDepartmentId() &&
+          resource.data.semesterId == userSemesterId() &&
+          resource.data.classroomId == userClassroomId() &&
+          resource.data.subjectId == userSubjectId()
+        ))
+      );
+      allow create: if signedIn() && (
+        isOrganizer() && writeSameInstitution('institutionId') ||
+        (isTeacher() && writeSameInstitution('institutionId') && request.resource.data.subjectId == userSubjectId())
+      );
+      allow update, delete: if signedIn() && (
+        isOrganizer() ||
+        (isTeacher() && (resource.data.createdBy == userId() || resource.data.subjectId == userSubjectId()))
+      );
+    }
+
+    match /onlineExams/{docId} {
+      allow read, list: if signedIn() && (
+        isOrganizer() ||
+        (isTeacher() && (resource.data.createdBy == userId() || resource.data.subjectId == userSubjectId())) ||
+        (isStudent() && (
+          resource.data.departmentId == userDepartmentId() &&
+          resource.data.semesterId == userSemesterId() &&
+          resource.data.classroomId == userClassroomId() &&
+          resource.data.subjectId == userSubjectId()
+        ))
+      );
+      allow create: if signedIn() && (
+        isOrganizer() && writeSameInstitution('institutionId') ||
+        (isTeacher() && writeSameInstitution('institutionId') && request.resource.data.subjectId == userSubjectId())
+      );
+      allow update, delete: if signedIn() && (
+        isOrganizer() ||
+        (isTeacher() && (resource.data.createdBy == userId() || resource.data.subjectId == userSubjectId()))
+      );
+    }
+
+    match /examAttempts/{docId} {
+      allow read, list: if signedIn() && (
+        isOrganizer() ||
+        (isTeacher() && resource.data.teacherId == userId()) ||
+        (isStudent() && resource.data.studentId == userId())
+      );
+      allow create, update: if signedIn() && (
+        isOrganizer() ||
+        (isStudent() && request.resource.data.studentId == userId()) ||
+        (isTeacher() && request.resource.data.teacherId == userId())
+      );
+      allow delete: if isOrganizer();
+    }
+
+    match /assignmentSubmissions/{docId} {
+      allow read, list: if signedIn() && (
+        isOrganizer() ||
+        (isTeacher() && resource.data.teacherId == userId()) ||
+        (isStudent() && resource.data.studentId == userId())
+      );
+      allow create, update: if signedIn() && (
+        isOrganizer() ||
+        (isStudent() && request.resource.data.studentId == userId()) ||
+        (isTeacher() && request.resource.data.teacherId == userId())
+      );
+      allow delete: if isOrganizer();
+    }
+
+    match /notifications/{docId} {
+      allow read, list: if signedIn() && (resource.data.userId == userId() || isOrganizer());
+      allow create, update, delete: if signedIn() && (
+        isOrganizer() || resource.data.userId == userId()
+      );
+    }
+
+    match /invites/{docId} {
+      allow read, list: if signedIn() && isOrganizer();
+      allow create, update, delete: if signedIn() && isOrganizer();
+    }
+
+    match /{document=**} {
+      allow read, write: if signedIn() && isOrganizer();
+    }
+  }
+}

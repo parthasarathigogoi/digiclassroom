@@ -1419,6 +1419,67 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return user.institutionId || user.id;
   };
 
+  const getEffectiveInstitutionId = () => {
+    if (!user) return undefined;
+    if (user.institutionId) return user.institutionId;
+    if (user.role === "organizer") return user.id;
+    return undefined;
+  };
+
+  const synthesizeAllocationFromUser = () => {
+    if (!user) return { departments: [] as AcademicDepartment[], semesters: [] as AcademicSemester[], classes: [] as AcademicClass[], subjects: [] as AcademicSubject[] };
+    const instId = getEffectiveInstitutionId();
+    const departments: AcademicDepartment[] = [];
+    const semesters: AcademicSemester[] = [];
+    const classes: AcademicClass[] = [];
+    const subjects: AcademicSubject[] = [];
+
+    if (user.departmentId && user.department) {
+      departments.push({
+        id: user.departmentId,
+        name: user.department,
+        code: user.department.slice(0, 4).toUpperCase(),
+        institutionId: instId || ""
+      });
+    }
+
+    if (user.semesterId && user.semester && user.departmentId) {
+      semesters.push({
+        id: user.semesterId,
+        name: user.semester,
+        departmentId: user.departmentId,
+        institutionId: instId || ""
+      });
+    }
+
+    if (user.classroomId && user.classroomName) {
+      classes.push({
+        id: user.classroomId,
+        name: user.classroomName,
+        section: user.classSection || "",
+        classCode: user.classJoinCode || "",
+        departmentId: user.departmentId || "",
+        departmentName: user.department || "",
+        semesterId: user.semesterId || "",
+        semesterName: user.semester || "",
+        institutionId: instId || ""
+      });
+    }
+
+    if (user.subjectId && user.subject && user.departmentId && user.semesterId) {
+      subjects.push({
+        id: user.subjectId,
+        name: user.subject,
+        code: user.subject.slice(0, 6).toUpperCase(),
+        departmentId: user.departmentId,
+        semesterId: user.semesterId,
+        institutionId: instId || ""
+      });
+    }
+
+    return { departments, semesters, classes, subjects };
+  };
+
   const createDepartment = async ({ name, code }: Pick<AcademicDepartment, "name" | "code">) => {
     const institutionId = requireOrganizerInstitutionId();
     const departmentRef = doc(collection(db, "academicDepartments"));
@@ -1441,37 +1502,59 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const removeDepartment = async (departmentId: string) => {
     requireOrganizerInstitutionId();
 
-    const [semesterQuery, classQuery, subjectQuery] = await Promise.all([
-      getDocs(query(collection(db, "academicSemesters"), where("departmentId", "==", departmentId))),
-      getDocs(query(collection(db, "academicClasses"), where("departmentId", "==", departmentId))),
-      getDocs(query(collection(db, "academicSubjects"), where("departmentId", "==", departmentId)))
-    ]);
+    try {
+      const [semesterQuery, classQuery, subjectQuery] = await Promise.all([
+        getDocs(query(collection(db, "academicSemesters"), where("departmentId", "==", departmentId))),
+        getDocs(query(collection(db, "academicClasses"), where("departmentId", "==", departmentId))),
+        getDocs(query(collection(db, "academicSubjects"), where("departmentId", "==", departmentId)))
+      ]);
 
-    await Promise.all([
-      ...semesterQuery.docs.map((item) => deleteDoc(doc(db, "academicSemesters", item.id))),
-      ...classQuery.docs.map((item) => deleteDoc(doc(db, "academicClasses", item.id))),
-      ...subjectQuery.docs.map((item) => deleteDoc(doc(db, "academicSubjects", item.id)))
-    ]);
+      await Promise.all([
+        ...semesterQuery.docs.map((item) => deleteDoc(doc(db, "academicSemesters", item.id))),
+        ...classQuery.docs.map((item) => deleteDoc(doc(db, "academicClasses", item.id))),
+        ...subjectQuery.docs.map((item) => deleteDoc(doc(db, "academicSubjects", item.id)))
+      ]);
 
-    await deleteDoc(doc(db, "academicDepartments", departmentId));
+      await deleteDoc(doc(db, "academicDepartments", departmentId));
+    } catch {
+    }
+
+    const semesters = readLocalItems<AcademicSemester>(LOCAL_SEMESTERS_KEY).filter((item) => item.departmentId !== departmentId);
+    writeLocalItems(LOCAL_SEMESTERS_KEY, semesters);
+    const classes = readLocalItems<AcademicClass>(LOCAL_CLASSES_KEY).filter((item) => item.departmentId !== departmentId);
+    writeLocalItems(LOCAL_CLASSES_KEY, classes);
+    const subjects = readLocalItems<AcademicSubject>(LOCAL_SUBJECTS_KEY).filter((item) => item.departmentId !== departmentId);
+    writeLocalItems(LOCAL_SUBJECTS_KEY, subjects);
     removeLocalItemById<AcademicDepartment>(LOCAL_DEPARTMENTS_KEY, departmentId);
   };
 
   const listDepartments = async () => {
-    const institutionId = user?.institutionId || (user?.role === "organizer" ? user.id : undefined);
+    const institutionId = getEffectiveInstitutionId();
 
     try {
       const departmentsQuery = institutionId
         ? query(collection(db, "academicDepartments"), where("institutionId", "==", institutionId))
         : query(collection(db, "academicDepartments"));
       const snapshot = await getDocs(departmentsQuery);
-      return snapshot.docs
-        .map((item) => ({ id: item.id, ...(item.data() as Omit<AcademicDepartment, "id">) }))
-        .sort((a, b) => a.name.localeCompare(b.name));
+      const firestoreItems = snapshot.docs
+        .map((item) => ({ id: item.id, ...(item.data() as Omit<AcademicDepartment, "id">) }));
+      const localItems = readLocalItems<AcademicDepartment>(LOCAL_DEPARTMENTS_KEY)
+        .filter((item) => !institutionId || item.institutionId === institutionId);
+      const synths = synthesizeAllocationFromUser().departments;
+      const merged = [...firestoreItems, ...localItems, ...synths].reduce(
+        (acc, curr) => (acc.some((item) => item.id === curr.id) ? acc : [...acc, curr]),
+        [] as AcademicDepartment[]
+      );
+      return merged.sort((a, b) => a.name.localeCompare(b.name));
     } catch {
-      return readLocalItems<AcademicDepartment>(LOCAL_DEPARTMENTS_KEY)
-        .filter((item) => !institutionId || item.institutionId === institutionId)
-        .sort((a, b) => a.name.localeCompare(b.name));
+      const localItems = readLocalItems<AcademicDepartment>(LOCAL_DEPARTMENTS_KEY)
+        .filter((item) => !institutionId || item.institutionId === institutionId);
+      const synths = synthesizeAllocationFromUser().departments;
+      const merged = [...localItems, ...synths].reduce(
+        (acc, curr) => (acc.some((item) => item.id === curr.id) ? acc : [...acc, curr]),
+        [] as AcademicDepartment[]
+      );
+      return merged.sort((a, b) => a.name.localeCompare(b.name));
     }
   };
 
@@ -1495,19 +1578,23 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const listSemesters = async (departmentId?: string) => {
-    const institutionId = user?.institutionId || (user?.role === "organizer" ? user.id : undefined);
+    const institutionId = getEffectiveInstitutionId();
     const filterItems = (items: AcademicSemester[]) => items
       .filter((item) => (!institutionId || item.institutionId === institutionId) && (!departmentId || item.departmentId === departmentId))
       .sort((a, b) => a.name.localeCompare(b.name));
+    const mergeSemesters = (lists: AcademicSemester[][]) => lists
+      .flat()
+      .reduce((acc, curr) => (acc.some((item) => item.id === curr.id) ? acc : [...acc, curr]), [] as AcademicSemester[]);
 
     try {
       const semestersQuery = institutionId
         ? query(collection(db, "academicSemesters"), where("institutionId", "==", institutionId))
         : query(collection(db, "academicSemesters"));
       const snapshot = await getDocs(semestersQuery);
-      return filterItems(snapshot.docs.map((item) => ({ id: item.id, ...(item.data() as Omit<AcademicSemester, "id">) })));
+      const firestoreItems = snapshot.docs.map((item) => ({ id: item.id, ...(item.data() as Omit<AcademicSemester, "id">) }));
+      return filterItems(mergeSemesters([firestoreItems, readLocalItems<AcademicSemester>(LOCAL_SEMESTERS_KEY), synthesizeAllocationFromUser().semesters]));
     } catch {
-      return filterItems(readLocalItems<AcademicSemester>(LOCAL_SEMESTERS_KEY));
+      return filterItems(mergeSemesters([readLocalItems<AcademicSemester>(LOCAL_SEMESTERS_KEY), synthesizeAllocationFromUser().semesters]));
     }
   };
 
@@ -1559,29 +1646,37 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const removeAcademicClass = async (classId: string) => {
     requireOrganizerInstitutionId();
 
-    await deleteDoc(doc(db, "academicClasses", classId));
+    try {
+      await deleteDoc(doc(db, "academicClasses", classId));
+    } catch {
+    }
+
     try {
       await deleteDoc(doc(db, "classrooms", classId));
     } catch {
-      // Ignore missing classroom document.
     }
+
     removeLocalItemById<AcademicClass>(LOCAL_CLASSES_KEY, classId);
   };
 
   const listAcademicClasses = async (filters?: { departmentId?: string; semesterId?: string }) => {
-    const institutionId = user?.institutionId || (user?.role === "organizer" ? user.id : undefined);
+    const institutionId = getEffectiveInstitutionId();
     const filterItems = (items: AcademicClass[]) => items
       .filter((item) => (!institutionId || item.institutionId === institutionId) && (!filters?.departmentId || item.departmentId === filters.departmentId) && (!filters?.semesterId || item.semesterId === filters.semesterId))
       .sort((a, b) => a.name.localeCompare(b.name));
+    const mergeClasses = (lists: AcademicClass[][]) => lists
+      .flat()
+      .reduce((acc, curr) => (acc.some((item) => item.id === curr.id) ? acc : [...acc, curr]), [] as AcademicClass[]);
 
     try {
       const classesQuery = institutionId
         ? query(collection(db, "academicClasses"), where("institutionId", "==", institutionId))
         : query(collection(db, "academicClasses"));
       const snapshot = await getDocs(classesQuery);
-      return filterItems(snapshot.docs.map((item) => ({ id: item.id, ...(item.data() as Omit<AcademicClass, "id">) })));
+      const firestoreItems = snapshot.docs.map((item) => ({ id: item.id, ...(item.data() as Omit<AcademicClass, "id">) }));
+      return filterItems(mergeClasses([firestoreItems, readLocalItems<AcademicClass>(LOCAL_CLASSES_KEY), synthesizeAllocationFromUser().classes]));
     } catch {
-      return filterItems(readLocalItems<AcademicClass>(LOCAL_CLASSES_KEY));
+      return filterItems(mergeClasses([readLocalItems<AcademicClass>(LOCAL_CLASSES_KEY), synthesizeAllocationFromUser().classes]));
     }
   };
 
@@ -1609,24 +1704,32 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const removeSubject = async (subjectId: string) => {
     requireOrganizerInstitutionId();
 
-    await deleteDoc(doc(db, "academicSubjects", subjectId));
+    try {
+      await deleteDoc(doc(db, "academicSubjects", subjectId));
+    } catch {
+    }
+
     removeLocalItemById<AcademicSubject>(LOCAL_SUBJECTS_KEY, subjectId);
   };
 
   const listSubjects = async (filters?: { departmentId?: string; semesterId?: string }) => {
-    const institutionId = user?.institutionId || (user?.role === "organizer" ? user.id : undefined);
+    const institutionId = getEffectiveInstitutionId();
     const filterItems = (items: AcademicSubject[]) => items
       .filter((item) => (!institutionId || item.institutionId === institutionId) && (!filters?.departmentId || item.departmentId === filters.departmentId) && (!filters?.semesterId || item.semesterId === filters.semesterId))
       .sort((a, b) => a.name.localeCompare(b.name));
+    const mergeSubjects = (lists: AcademicSubject[][]) => lists
+      .flat()
+      .reduce((acc, curr) => (acc.some((item) => item.id === curr.id) ? acc : [...acc, curr]), [] as AcademicSubject[]);
 
     try {
       const subjectsQuery = institutionId
         ? query(collection(db, "academicSubjects"), where("institutionId", "==", institutionId))
         : query(collection(db, "academicSubjects"));
       const snapshot = await getDocs(subjectsQuery);
-      return filterItems(snapshot.docs.map((item) => ({ id: item.id, ...(item.data() as Omit<AcademicSubject, "id">) })));
+      const firestoreItems = snapshot.docs.map((item) => ({ id: item.id, ...(item.data() as Omit<AcademicSubject, "id">) }));
+      return filterItems(mergeSubjects([firestoreItems, readLocalItems<AcademicSubject>(LOCAL_SUBJECTS_KEY), synthesizeAllocationFromUser().subjects]));
     } catch {
-      return filterItems(readLocalItems<AcademicSubject>(LOCAL_SUBJECTS_KEY));
+      return filterItems(mergeSubjects([readLocalItems<AcademicSubject>(LOCAL_SUBJECTS_KEY), synthesizeAllocationFromUser().subjects]));
     }
   };
 

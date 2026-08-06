@@ -142,6 +142,38 @@ const BULK_TEMPLATE = `[
   }
 ]`;
 
+const LOCAL_QB_KEY = "digiclassroom.questionBank";
+
+const readLocalQuestions = (): BankQuestion[] => {
+  try {
+    const raw = typeof window !== "undefined" ? window.localStorage.getItem(LOCAL_QB_KEY) : null;
+    return raw ? (JSON.parse(raw) as BankQuestion[]) : [];
+  } catch {
+    return [];
+  }
+};
+
+const writeLocalQuestions = (items: BankQuestion[]) => {
+  try {
+    if (typeof window !== "undefined") {
+      window.localStorage.setItem(LOCAL_QB_KEY, JSON.stringify(items));
+    }
+  } catch {
+  }
+};
+
+const upsertLocalQuestion = (q: BankQuestion) => {
+  const list = readLocalQuestions();
+  const idx = list.findIndex((x) => x.id === q.id);
+  if (idx >= 0) list[idx] = q;
+  else list.unshift(q);
+  writeLocalQuestions(list);
+};
+
+const removeLocalQuestion = (id: string) => {
+  writeLocalQuestions(readLocalQuestions().filter((x) => x.id !== id));
+};
+
 const formatDate = (value: unknown) => {
   if (!value) return "—";
   if (typeof value === "object" && "toDate" in value && typeof value.toDate === "function") {
@@ -233,12 +265,21 @@ const QuestionBankPage: React.FC = () => {
       setClasses(cls);
       setSubjects(subs);
 
-      const qSnap = await getDocs(query(collection(db, "questionBank"), where("institutionId", "==", user.institutionId || user.id)));
-      const list = qSnap.docs
-        .map((d) => ({ id: d.id, ...(d.data() as Omit<BankQuestion, "id">) }))
+      let list: BankQuestion[] = [];
+      try {
+        const qSnap = await getDocs(query(collection(db, "questionBank"), where("institutionId", "==", user.institutionId || user.id)));
+        list = qSnap.docs
+          .map((d) => ({ id: d.id, ...(d.data() as Omit<BankQuestion, "id">) }));
+      } catch {
+        list = [];
+      }
+
+      const localScoped = readLocalQuestions().filter((q) => (q.institutionId === user.institutionId || q.institutionId === user.id));
+      const merged = [...list, ...localScoped]
         .filter((q) => canAccessAllocationScope(user, q))
+        .reduce((acc, curr) => (acc.some((x) => x.id === curr.id) ? acc : [...acc, curr]), [] as BankQuestion[])
         .sort((a, b) => (a.text || "").localeCompare(b.text || ""));
-      setQuestions(list);
+      setQuestions(merged);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Unable to load question bank.");
     } finally {
@@ -378,24 +419,35 @@ const QuestionBankPage: React.FC = () => {
         subject: sub?.name,
         institutionId: user.institutionId || user.id,
         createdBy: draft.id ? undefined : user.id,
-        updatedAt: serverTimestamp() as unknown as Date
+        updatedAt: Date.now() as unknown as Date
       };
 
       let nextId = draft.id || "";
-      if (draft.id) {
-        await updateDoc(doc(db, "questionBank", draft.id), {
-          ...payload,
-          updatedAt: serverTimestamp()
-        });
-      } else {
-        const ref = await addDoc(collection(db, "questionBank"), {
-          ...payload,
-          createdAt: serverTimestamp()
-        });
-        nextId = ref.id;
+      let savedFallbackOnly = false;
+      try {
+        if (draft.id) {
+          await updateDoc(doc(db, "questionBank", draft.id), {
+            ...payload,
+            updatedAt: serverTimestamp()
+          });
+        } else {
+          const ref = await addDoc(collection(db, "questionBank"), {
+            ...payload,
+            createdAt: serverTimestamp()
+          });
+          nextId = ref.id;
+        }
+      } catch {
+        nextId = draft.id || `local_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+        savedFallbackOnly = true;
       }
 
       const saved: BankQuestion = { id: nextId, ...payload };
+      if (savedFallbackOnly || draft.id) {
+        upsertLocalQuestion(saved);
+      } else {
+        upsertLocalQuestion(saved);
+      }
       setQuestions((current) =>
         current.some((q) => q.id === nextId)
           ? current.map((q) => (q.id === nextId ? saved : q))
@@ -415,11 +467,11 @@ const QuestionBankPage: React.FC = () => {
     if (!window.confirm(`Delete this question?\n\n"${q.text.slice(0, 80)}"`)) return;
     try {
       await deleteDoc(doc(db, "questionBank", q.id));
-      setQuestions((current) => current.filter((x) => x.id !== q.id));
-      toast.success("Question deleted.");
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Unable to delete question.");
+    } catch {
     }
+    removeLocalQuestion(q.id);
+    setQuestions((current) => current.filter((x) => x.id !== q.id));
+    toast.success("Question deleted.");
   };
 
   const parseBulk = async () => {
@@ -472,11 +524,19 @@ const QuestionBankPage: React.FC = () => {
           subject: sub?.name,
           institutionId: user.institutionId || user.id,
           createdBy: user.id,
-          createdAt: serverTimestamp() as unknown as Date,
-          updatedAt: serverTimestamp() as unknown as Date
+          createdAt: Date.now() as unknown as Date,
+          updatedAt: Date.now() as unknown as Date
         };
-        const ref = await addDoc(collection(db, "questionBank"), payload);
-        created.push({ id: ref.id, ...payload });
+        let id: string;
+        try {
+          const ref = await addDoc(collection(db, "questionBank"), payload);
+          id = ref.id;
+        } catch {
+          id = `local_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+        }
+        const q: BankQuestion = { id, ...payload };
+        upsertLocalQuestion(q);
+        created.push(q);
         added++;
       }
       setQuestions((current) =>
