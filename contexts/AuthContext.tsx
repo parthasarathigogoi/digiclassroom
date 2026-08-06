@@ -71,6 +71,30 @@ export type TeacherInvitation = {
   acceptedAt?: unknown;
 };
 
+export type StudentInvitation = {
+  id: string;
+  token: string;
+  studentName: string;
+  rollNumber: string;
+  email: string;
+  departmentId: string;
+  department: string;
+  semesterId: string;
+  semester: string;
+  classId: string;
+  classroomName: string;
+  classSection: string;
+  classJoinCode: string;
+  subjectIds: string[];
+  subjects: string[];
+  status: "pending" | "accepted";
+  institutionId: string;
+  institutionName: string;
+  invitedBy: string;
+  createdAt?: unknown;
+  acceptedAt?: unknown;
+};
+
 export type StudentAccessRequest = {
   id: string;
   name: string;
@@ -205,6 +229,21 @@ type TeacherInvitationInput = {
   email: string;
 };
 
+export type StudentInvitationInput = {
+  studentName: string;
+  rollNumber: string;
+  email: string;
+  departmentId: string;
+  semesterId: string;
+  classId: string;
+  subjectIds: string[];
+};
+
+type StudentActivationInput = {
+  token: string;
+  password: string;
+};
+
 export type OrganizationSettingsInput = {
   name: string;
   logoUrl: string;
@@ -236,6 +275,10 @@ type AuthContextType = {
   activateTeacherInvitation: (input: TeacherActivationInput) => Promise<User>;
   getTeacherInvitation: (token: string) => Promise<TeacherInvitation>;
   listTeacherInvitations: () => Promise<TeacherInvitation[]>;
+  inviteStudent: (input: StudentInvitationInput) => Promise<StudentInvitation>;
+  activateStudentInvitation: (input: StudentActivationInput) => Promise<User>;
+  getStudentInvitation: (token: string) => Promise<StudentInvitation>;
+  listStudentInvitations: () => Promise<StudentInvitation[]>;
   createDepartment: (input: Pick<AcademicDepartment, "name" | "code">) => Promise<AcademicDepartment>;
   listDepartments: () => Promise<AcademicDepartment[]>;
   createSemester: (input: Pick<AcademicSemester, "name" | "departmentId">) => Promise<AcademicSemester>;
@@ -266,9 +309,11 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 const DEFAULT_INSTITUTION = "DigiClassroom";
 const INVITED_TEACHER_DOMAIN = /@gmail\.com$/i;
+const INVITED_STUDENT_DOMAIN = /@gmail\.com$/i;
 const LOCAL_ORGANIZERS_KEY = "digiclassroom.organizers";
 const LOCAL_SESSION_KEY = "digiclassroom.session";
 const LOCAL_TEACHER_INVITATIONS_KEY = "digiclassroom.teacherInvitations";
+const LOCAL_STUDENT_INVITATIONS_KEY = "digiclassroom.studentInvitations";
 const LOCAL_DEPARTMENTS_KEY = "digiclassroom.departments";
 const LOCAL_SEMESTERS_KEY = "digiclassroom.semesters";
 const LOCAL_CLASSES_KEY = "digiclassroom.classes";
@@ -373,6 +418,43 @@ const updateLocalTeacherInvitation = (invitationId: string, updates: Partial<Tea
 
 const createLocalTeacherId = (email: string) => `local-teacher-${email.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`;
 
+const readLocalStudentInvitations = (): StudentInvitation[] => {
+  if (!canUseBrowserStorage()) {
+    return [];
+  }
+
+  try {
+    return JSON.parse(window.localStorage.getItem(LOCAL_STUDENT_INVITATIONS_KEY) || "[]") as StudentInvitation[];
+  } catch {
+    return [];
+  }
+};
+
+const writeLocalStudentInvitations = (invitations: StudentInvitation[]) => {
+  if (!canUseBrowserStorage()) {
+    return;
+  }
+
+  window.localStorage.setItem(LOCAL_STUDENT_INVITATIONS_KEY, JSON.stringify(invitations));
+};
+
+const saveLocalStudentInvitation = (invitation: StudentInvitation) => {
+  const invitations = readLocalStudentInvitations();
+  const nextInvitations = invitations.some((item) => item.id === invitation.id || item.token === invitation.token)
+    ? invitations.map((item) => (item.id === invitation.id || item.token === invitation.token ? invitation : item))
+    : [invitation, ...invitations];
+
+  writeLocalStudentInvitations(nextInvitations);
+};
+
+const updateLocalStudentInvitation = (invitationId: string, updates: Partial<StudentInvitation>) => {
+  writeLocalStudentInvitations(
+    readLocalStudentInvitations().map((invitation) => (invitation.id === invitationId ? { ...invitation, ...updates } : invitation))
+  );
+};
+
+const createLocalStudentId = (email: string) => `local-student-${email.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`;
+
 const readLocalItems = <T,>(key: string): T[] => {
   if (!canUseBrowserStorage()) {
     return [];
@@ -433,6 +515,68 @@ const decodeInvitationToken = (token: string): TeacherInvitation | null => {
       email: payload.email,
       department: payload.department || "",
       subject: payload.subject || "",
+      status: "pending",
+      institutionId: payload.institutionId,
+      institutionName: payload.institutionName,
+      invitedBy: payload.invitedBy
+    };
+  } catch {
+    return null;
+  }
+};
+
+const encodeStudentInvitationToken = (invitation: Omit<StudentInvitation, "token">) => {
+  const payload = JSON.stringify({
+    kind: "student_invite",
+    id: invitation.id,
+    studentName: invitation.studentName,
+    rollNumber: invitation.rollNumber,
+    email: invitation.email,
+    departmentId: invitation.departmentId,
+    department: invitation.department,
+    semesterId: invitation.semesterId,
+    semester: invitation.semester,
+    classId: invitation.classId,
+    classroomName: invitation.classroomName,
+    classSection: invitation.classSection,
+    classJoinCode: invitation.classJoinCode,
+    subjectIds: invitation.subjectIds,
+    subjects: invitation.subjects,
+    institutionId: invitation.institutionId,
+    institutionName: invitation.institutionName,
+    invitedBy: invitation.invitedBy,
+    nonce: createToken()
+  });
+
+  return btoa(payload).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
+};
+
+const decodeStudentInvitationToken = (token: string): StudentInvitation | null => {
+  try {
+    const base64 = token.replace(/-/g, "+").replace(/_/g, "/");
+    const paddedBase64 = base64.padEnd(base64.length + ((4 - (base64.length % 4)) % 4), "=");
+    const payload = JSON.parse(atob(paddedBase64)) as Partial<StudentInvitation> & { kind?: string };
+
+    if (!payload.id || !payload.studentName || !payload.email || !payload.institutionId || !payload.institutionName || !payload.invitedBy) {
+      return null;
+    }
+
+    return {
+      id: payload.id,
+      token,
+      studentName: payload.studentName,
+      rollNumber: payload.rollNumber || "",
+      email: payload.email,
+      departmentId: payload.departmentId || "",
+      department: payload.department || "",
+      semesterId: payload.semesterId || "",
+      semester: payload.semester || "",
+      classId: payload.classId || "",
+      classroomName: payload.classroomName || "",
+      classSection: payload.classSection || "",
+      classJoinCode: payload.classJoinCode || "",
+      subjectIds: Array.isArray(payload.subjectIds) ? payload.subjectIds : [],
+      subjects: Array.isArray(payload.subjects) ? payload.subjects : [],
       status: "pending",
       institutionId: payload.institutionId,
       institutionName: payload.institutionName,
@@ -613,6 +757,10 @@ const getAuthErrorMessage = (error: unknown) => {
       return "Please enter a valid class join code shared by your classroom.";
     case "dc/teacher-gmail-required":
       return "Teacher invitations must be sent to a Gmail address.";
+    case "dc/student-gmail-required":
+      return "Student invitations must be sent to a Gmail address.";
+    case "dc/student-missing-allocation":
+      return "Please select Department, Semester, Class, and at least one Subject before inviting the student.";
     case "dc/invitation-invalid":
       return "Invalid or expired invitation link.";
     case "dc/invitation-completed":
