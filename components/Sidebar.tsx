@@ -26,7 +26,8 @@ import {
   User,
   GraduationCap,
   Megaphone,
-  LogOut
+  LogOut,
+  Target
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
@@ -83,6 +84,7 @@ const studentNavItems = [
   { icon: Users, label: "My Classes", href: "/dashboard/classrooms" },
   { icon: BookOpen, label: "Study Materials", href: "/dashboard/study-materials" },
   { icon: FileText, label: "Assignments", href: "/dashboard/assignments" },
+  { icon: Target, label: "Practice Center", href: "/dashboard/practice-center" },
   { icon: Laptop, label: "Exams", href: "/dashboard/online-exams" },
   { icon: Award, label: "Results", href: "/dashboard/results" },
   { icon: ClipboardList, label: "Attendance", href: "/dashboard/attendance" },
