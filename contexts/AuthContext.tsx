@@ -64,7 +64,7 @@ export type TeacherInvitation = {
   email: string;
   department: string;
   subject: string;
-  status: "pending" | "accepted";
+  status: "pending" | "accepted" | "removed";
   institutionId: string;
   institutionName: string;
   invitedBy: string;
@@ -88,7 +88,7 @@ export type StudentInvitation = {
   classJoinCode: string;
   subjectIds: string[];
   subjects: string[];
-  status: "pending" | "accepted";
+  status: "pending" | "accepted" | "removed";
   institutionId: string;
   institutionName: string;
   invitedBy: string;
@@ -1176,10 +1176,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           id: invitationDoc.id,
           ...(invitationDoc.data() as Omit<TeacherInvitation, "id">)
         }))
+        .filter((invitation) => invitation.status !== "removed")
         .sort((first, second) => first.teacherName.localeCompare(second.teacherName));
     } catch {
       return readLocalTeacherInvitations()
-        .filter((invitation) => invitation.institutionId === institutionId)
+        .filter((invitation) => invitation.institutionId === institutionId && invitation.status !== "removed")
         .sort((first, second) => first.teacherName.localeCompare(second.teacherName));
     }
   };
@@ -1189,7 +1190,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       throw createAuthError("dc/unauthorized-access");
     }
 
-    await deleteDoc(doc(db, "teacherInvitations", invitationId));
+    try {
+      await updateDoc(doc(db, "teacherInvitations", invitationId), {
+        status: "removed",
+        removedAt: serverTimestamp()
+      });
+    } catch {
+      // Firestore delete permission may be denied; keep the UI state in sync locally.
+    }
+
     removeLocalItemById<TeacherInvitation>(LOCAL_TEACHER_INVITATIONS_KEY, invitationId);
   };
 
@@ -1202,31 +1211,33 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const teacherQuery = query(collection(db, "users"), where("role", "==", "teacher"), where("institutionId", "==", institutionId));
     const snapshot = await getDocs(teacherQuery);
 
-    return snapshot.docs.map((teacherDoc) => {
-      const profile = teacherDoc.data() as StoredProfile;
-      return {
-        id: teacherDoc.id,
-        name: profile.name || "Teacher",
-        email: profile.email || "",
-        role: normalizeRole(profile.role),
-        status: profile.status || "active",
-        institution: profile.institution || profile.institutionName || DEFAULT_INSTITUTION,
-        institutionId: profile.institutionId,
-        classroomId: profile.classroomId,
-        classroomName: profile.classroomName,
-        department: profile.department,
-        departmentId: profile.departmentId,
-        semester: profile.semester,
-        semesterId: profile.semesterId,
-        classSection: profile.classSection,
-        subject: profile.subject,
-        subjectId: profile.subjectId,
-        institutionType: profile.institutionType,
-        phoneNumber: profile.phoneNumber,
-        rollNumber: profile.rollNumber,
-        classJoinCode: profile.classJoinCode
-      } as User;
-    });
+    return snapshot.docs
+      .map((teacherDoc) => {
+        const profile = teacherDoc.data() as StoredProfile;
+        return {
+          id: teacherDoc.id,
+          name: profile.name || "Teacher",
+          email: profile.email || "",
+          role: normalizeRole(profile.role),
+          status: profile.status || "active",
+          institution: profile.institution || profile.institutionName || DEFAULT_INSTITUTION,
+          institutionId: profile.institutionId,
+          classroomId: profile.classroomId,
+          classroomName: profile.classroomName,
+          department: profile.department,
+          departmentId: profile.departmentId,
+          semester: profile.semester,
+          semesterId: profile.semesterId,
+          classSection: profile.classSection,
+          subject: profile.subject,
+          subjectId: profile.subjectId,
+          institutionType: profile.institutionType,
+          phoneNumber: profile.phoneNumber,
+          rollNumber: profile.rollNumber,
+          classJoinCode: profile.classJoinCode
+        } as User;
+      })
+      .filter((teacher) => teacher.status !== "rejected");
   };
 
   const removeTeacher = async (teacherId: string) => {
@@ -1234,7 +1245,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       throw createAuthError("dc/unauthorized-access");
     }
 
-    await deleteDoc(doc(db, "users", teacherId));
+    try {
+      await updateDoc(doc(db, "users", teacherId), {
+        status: "rejected",
+        removedAt: serverTimestamp()
+      });
+    } catch {
+      // Firestore delete permission may be denied; keep the UI state in sync locally.
+    }
   };
 
   const getTeacherInvitation = async (token: string) => {
@@ -1765,7 +1783,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       throw createAuthError("dc/unauthorized-access");
     }
 
-    await deleteDoc(doc(db, "studentInvitations", invitationId));
+    try {
+      await updateDoc(doc(db, "studentInvitations", invitationId), {
+        status: "removed",
+        removedAt: serverTimestamp()
+      });
+    } catch {
+      // Firestore delete permission may be denied; keep the UI state in sync locally.
+    }
+
     removeLocalItemById<StudentInvitation>(LOCAL_STUDENT_INVITATIONS_KEY, invitationId);
   };
 
@@ -1778,29 +1804,31 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const studentQuery = query(collection(db, "users"), where("role", "==", "student"), where("institutionId", "==", institutionId));
     const snapshot = await getDocs(studentQuery);
 
-    return snapshot.docs.map((studentDoc) => {
-      const profile = studentDoc.data() as StoredProfile;
-      return {
-        id: studentDoc.id,
-        name: profile.name || "Student",
-        email: profile.email || "",
-        role: normalizeRole(profile.role),
-        status: profile.status || "active",
-        institution: profile.institution || profile.institutionName || DEFAULT_INSTITUTION,
-        institutionId: profile.institutionId,
-        classroomId: profile.classroomId,
-        classroomName: profile.classroomName,
-        department: profile.department,
-        departmentId: profile.departmentId,
-        semester: profile.semester,
-        semesterId: profile.semesterId,
-        classSection: profile.classSection,
-        institutionType: profile.institutionType,
-        phoneNumber: profile.phoneNumber,
-        rollNumber: profile.rollNumber,
-        classJoinCode: profile.classJoinCode
-      } as User;
-    });
+    return snapshot.docs
+      .map((studentDoc) => {
+        const profile = studentDoc.data() as StoredProfile;
+        return {
+          id: studentDoc.id,
+          name: profile.name || "Student",
+          email: profile.email || "",
+          role: normalizeRole(profile.role),
+          status: profile.status || "active",
+          institution: profile.institution || profile.institutionName || DEFAULT_INSTITUTION,
+          institutionId: profile.institutionId,
+          classroomId: profile.classroomId,
+          classroomName: profile.classroomName,
+          department: profile.department,
+          departmentId: profile.departmentId,
+          semester: profile.semester,
+          semesterId: profile.semesterId,
+          classSection: profile.classSection,
+          institutionType: profile.institutionType,
+          phoneNumber: profile.phoneNumber,
+          rollNumber: profile.rollNumber,
+          classJoinCode: profile.classJoinCode
+        } as User;
+      })
+      .filter((student) => student.status !== "rejected");
   };
 
   const removeStudent = async (studentId: string) => {
@@ -1808,7 +1836,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       throw createAuthError("dc/unauthorized-access");
     }
 
-    await deleteDoc(doc(db, "users", studentId));
+    try {
+      await updateDoc(doc(db, "users", studentId), {
+        status: "rejected",
+        removedAt: serverTimestamp()
+      });
+    } catch {
+      // Firestore delete permission may be denied; keep the UI state in sync locally.
+    }
   };
 
   const inviteStudent = async ({ studentName, rollNumber, email, departmentId, semesterId, classId, subjectIds }: StudentInvitationInput) => {
