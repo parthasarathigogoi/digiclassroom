@@ -761,6 +761,8 @@ const getAuthErrorMessage = (error: unknown) => {
       return "Student invitations must be sent to a Gmail address.";
     case "dc/student-missing-allocation":
       return "Please select Department, Semester, Class, and at least one Subject before inviting the student.";
+    case "dc/invalid-allocation-scope":
+      return "Please choose a class and subject that belong to the selected Department and Semester.";
     case "dc/invitation-invalid":
       return "Invalid or expired invitation link.";
     case "dc/invitation-completed":
@@ -1506,14 +1508,54 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const allocateTeacher = async ({ teacherUserId, teacherEmail, departmentId, semesterId, classId, subjectId }: TeacherAllocationInput) => {
     requireOrganizerInstitutionId();
-    const [classes, subjects] = await Promise.all([listAcademicClasses(), listSubjects()]);
-    const academicClass = classes.find((item) => item.id === classId);
-    const subject = subjects.find((item) => item.id === subjectId);
 
-    if (!academicClass || !subject) {
-      throw createAuthError("dc/unauthorized-access");
+    const [departments, semesters, classes, subjects] = await Promise.all([
+      listDepartments(),
+      listSemesters(departmentId),
+      listAcademicClasses({ departmentId, semesterId }),
+      listSubjects({ departmentId, semesterId })
+    ]);
+
+    let academicClass = classes.find((item) => item.id === classId);
+    let subject = subjects.find((item) => item.id === subjectId);
+
+    if (!academicClass) {
+      try {
+        const classSnap = await getDoc(doc(db, "academicClasses", classId));
+        if (classSnap.exists()) {
+          academicClass = { id: classSnap.id, ...(classSnap.data() as Omit<AcademicClass, "id">) };
+        }
+      } catch {
+        academicClass = undefined;
+      }
     }
 
+    if (!subject) {
+      try {
+        const subjectSnap = await getDoc(doc(db, "academicSubjects", subjectId));
+        if (subjectSnap.exists()) {
+          subject = { id: subjectSnap.id, ...(subjectSnap.data() as Omit<AcademicSubject, "id">) };
+        }
+      } catch {
+        subject = undefined;
+      }
+    }
+
+    if (!academicClass || !subject) {
+      throw createAuthError("dc/invalid-allocation-scope");
+    }
+
+    if (
+      academicClass.departmentId !== departmentId ||
+      academicClass.semesterId !== semesterId ||
+      subject.departmentId !== departmentId ||
+      subject.semesterId !== semesterId
+    ) {
+      throw createAuthError("dc/invalid-allocation-scope");
+    }
+
+    const department = departments.find((item) => item.id === departmentId);
+    const semester = semesters.find((item) => item.id === semesterId);
     const existingTeacher = teacherUserId ? { id: teacherUserId, profile: null } : await findUserProfileByEmail(teacherEmail);
     const teacherId = existingTeacher?.id || createLocalTeacherId(teacherEmail);
 
@@ -1525,9 +1567,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       institution: user?.institution || DEFAULT_INSTITUTION,
       institutionId: academicClass.institutionId,
       departmentId,
-      department: academicClass.departmentName,
+      department: department?.name || academicClass.departmentName,
       semesterId,
-      semester: academicClass.semesterName,
+      semester: semester?.name || academicClass.semesterName,
       classroomId: classId,
       classroomName: academicClass.name,
       classSection: academicClass.section,

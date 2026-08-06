@@ -27,7 +27,6 @@ import {
   getDocs,
   query,
   serverTimestamp,
-  setDoc,
   updateDoc,
   where
 } from "firebase/firestore";
@@ -201,13 +200,35 @@ const QuestionBankPage: React.FC = () => {
     if (!user) return;
     setIsLoading(true);
     try {
-      const [depts, sems, cls, subs] = await Promise.all([
-        loaderRefs.current.listDepartments(),
-        loaderRefs.current.listSemesters(),
-        loaderRefs.current.listAcademicClasses(),
-        loaderRefs.current.listSubjects()
-      ]);
-      setDepartments(depts);
+      const allDepts = await loaderRefs.current.listDepartments();
+      const scopedDeptIds = Array.from(new Set([...(user.departmentId ? [user.departmentId] : []), ...allDepts.map((d) => d.id)]));
+      const scopedDepts = user.departmentId ? allDepts.filter((d) => d.id === user.departmentId) : allDepts;
+
+      const loadSemestersForDepts = async () => {
+        const perDept = await Promise.all(
+          scopedDeptIds.map((deptId) => loaderRefs.current.listSemesters(deptId))
+        );
+        const merged = perDept.flat().filter((s, index, arr) => arr.findIndex((o) => o.id === s.id) === index);
+        return user.semesterId ? merged.filter((s) => s.id === user.semesterId) : merged;
+      };
+      const sems = await loadSemestersForDepts();
+
+      const scopedSemIds = Array.from(new Set([...(user.semesterId ? [user.semesterId] : []), ...sems.map((s) => s.id)]));
+      const loadClassesForScope = async () => {
+        const pairs = scopedDeptIds.flatMap((deptId) => scopedSemIds.map((semId) => ({ departmentId: deptId, semesterId: semId })));
+        const fetched = await Promise.all(pairs.map((p) => loaderRefs.current.listAcademicClasses(p)));
+        const merged = fetched.flat().filter((c, idx, arr) => arr.findIndex((o) => o.id === c.id) === idx);
+        return user.classroomId ? merged.filter((c) => c.id === user.classroomId) : merged;
+      };
+      const loadSubjectsForScope = async () => {
+        const pairs = scopedDeptIds.flatMap((deptId) => scopedSemIds.map((semId) => ({ departmentId: deptId, semesterId: semId })));
+        const fetched = await Promise.all(pairs.map((p) => loaderRefs.current.listSubjects(p)));
+        const merged = fetched.flat().filter((s, idx, arr) => arr.findIndex((o) => o.id === s.id) === idx);
+        return user.subjectId ? merged.filter((s) => s.id === user.subjectId) : merged;
+      };
+      const [cls, subs] = await Promise.all([loadClassesForScope(), loadSubjectsForScope()]);
+
+      setDepartments(scopedDepts);
       setSemesters(sems);
       setClasses(cls);
       setSubjects(subs);

@@ -61,13 +61,33 @@ const OrganizerTeachersPage: React.FC = () => {
     setIsRefreshing(true);
 
     try {
-      const [nextInvitations, nextDepartments, nextSemesters, nextClasses, nextSubjects] = await Promise.all([
+      const [nextInvitations, nextDepartments] = await Promise.all([
         listTeacherInvitationsRef.current(),
-        allocationLoadersRef.current.listDepartments(),
-        allocationLoadersRef.current.listSemesters(),
-        allocationLoadersRef.current.listAcademicClasses(),
-        allocationLoadersRef.current.listSubjects()
+        allocationLoadersRef.current.listDepartments()
       ]);
+
+      const deptIds = nextDepartments.map((item) => item.id);
+      const semestersByDept = await Promise.all(deptIds.map((deptId) => allocationLoadersRef.current.listSemesters(deptId)));
+      const nextSemesters = semestersByDept
+        .flat()
+        .filter((item, index, arr) => arr.findIndex((o) => o.id === item.id) === index);
+
+      const scopePairs = deptIds.flatMap((deptId) =>
+        Array.from(new Set([null, ...nextSemesters.filter((s) => s.departmentId === deptId).map((s) => s.id)])).map((semId) => ({
+          departmentId: deptId,
+          semesterId: semId || undefined
+        }))
+      );
+
+      const [nextClasses, nextSubjects] = await Promise.all([
+        Promise.all(scopePairs.map((pair) => allocationLoadersRef.current.listAcademicClasses(pair))).then((results) =>
+          results.flat().filter((item, index, arr) => arr.findIndex((o) => o.id === item.id) === index)
+        ),
+        Promise.all(scopePairs.map((pair) => allocationLoadersRef.current.listSubjects(pair))).then((results) =>
+          results.flat().filter((item, index, arr) => arr.findIndex((o) => o.id === item.id) === index)
+        )
+      ]);
+
       setInvitations(nextInvitations);
       setDepartments(nextDepartments);
       setSemesters(nextSemesters);

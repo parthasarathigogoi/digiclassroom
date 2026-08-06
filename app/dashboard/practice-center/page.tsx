@@ -217,8 +217,7 @@ const gradeTextAnswer = (answer: string, reference: string, qType: QuestionType)
     const aBool = truthy.includes(a);
     const rBool = truthy.includes(r);
     if (truthy.includes(a) && rBool) return { correct: true, score: 1 };
-    if (falsy.includes(a) && truthy.some((x) => !truthy.includes(r) ? falsy.includes(r) : false)) return { correct: false, score: 0 };
-    if (falsy.includes(a) && falsy.some((f) => r === f || r === clean(f))) return { correct: true, score: 1 };
+    if (falsy.includes(a) && falsy.some((x) => r === x || r === clean(x))) return { correct: true, score: 1 };
     if (aBool === rBool && (truthy.includes(a) || falsy.includes(a))) return { correct: true, score: 1 };
   }
   const aWords = a.split(" ").filter(Boolean);
