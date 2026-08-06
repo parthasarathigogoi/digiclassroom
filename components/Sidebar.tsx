@@ -41,20 +41,11 @@ const navItems = [
   { icon: Users, label: "My Classes", href: "/dashboard/classrooms" },
   { icon: BookOpen, label: "Study Materials", href: "/dashboard/study-materials" },
   { icon: FileText, label: "Assignments", href: "/dashboard/assignments" },
-  { icon: Laptop, label: "Online Exams", href: "/dashboard/online-exams" },
+  { icon: Laptop, label: "Exams", href: "/dashboard/online-exams" },
   { icon: Award, label: "Results", href: "/dashboard/results" },
-  { icon: BarChart3, label: "Analytics", href: "/dashboard/analytics" },
-  { icon: Video, label: "Live Classes", href: "/dashboard/live-classes" },
-  { icon: Calendar, label: "Timetable", href: "/dashboard/timetable" },
   { icon: ClipboardList, label: "Attendance", href: "/dashboard/attendance" },
-  { icon: Target, label: "Practice Center", href: "/dashboard/practice-center" },
-  { icon: Sparkles, label: "AI Assistant", href: "/dashboard/ai" },
-  { icon: Library, label: "Library", href: "/dashboard/library" },
-  { icon: FileCheck, label: "Certificates", href: "/dashboard/certificates" },
-  { icon: MessageSquare, label: "Messages", href: "/dashboard/messages" },
   { icon: Bell, label: "Notifications", href: "/dashboard/notifications" },
-  { icon: User, label: "Profile", href: "/dashboard/profile" },
-  { icon: Settings, label: "Settings", href: "/dashboard/settings" }
+  { icon: User, label: "Profile", href: "/dashboard/profile" }
 ];
 
 const organizerNavItems = [
@@ -93,16 +84,13 @@ const teacherNavItems = [
 ];
 
 const studentNavItems = [
-  { icon: LayoutDashboard, label: "Dashboard", href: "/student/dashboard" },
-  { icon: BookOpen, label: "My Subjects", href: "/dashboard/subjects" },
-  { icon: Library, label: "Study Materials", href: "/dashboard/study-materials" },
+  { icon: LayoutDashboard, label: "Dashboard", href: "/dashboard" },
+  { icon: Users, label: "My Classes", href: "/dashboard/classrooms" },
+  { icon: BookOpen, label: "Study Materials", href: "/dashboard/study-materials" },
   { icon: FileText, label: "Assignments", href: "/dashboard/assignments" },
-  { icon: Laptop, label: "Upcoming Exams", href: "/dashboard/online-exams" },
-  { icon: Clock, label: "Ongoing Exams", href: "/dashboard/online-exams" },
-  { icon: CheckCircle2, label: "Completed Exams", href: "/dashboard/online-exams" },
+  { icon: Laptop, label: "Exams", href: "/dashboard/online-exams" },
   { icon: Award, label: "Results", href: "/dashboard/results" },
-  { icon: BarChart3, label: "Performance Reports", href: "/dashboard/analytics" },
-  { icon: FileCheck, label: "Attendance", href: "/dashboard/attendance" },
+  { icon: ClipboardList, label: "Attendance", href: "/dashboard/attendance" },
   { icon: Bell, label: "Notifications", href: "/dashboard/notifications" },
   { icon: User, label: "Profile", href: "/dashboard/profile" }
 ];

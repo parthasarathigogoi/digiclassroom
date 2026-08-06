@@ -249,6 +249,7 @@ type AuthContextType = {
   listPendingStudentRequests: () => Promise<StudentAccessRequest[]>;
   decideStudentRequest: (studentId: string, decision: "approve" | "reject") => Promise<void>;
   updateOrganizationSettings: (input: OrganizationSettingsInput) => Promise<void>;
+  updateUserProfile: (updates: Partial<Pick<User, "name" | "phoneNumber">>) => Promise<void>;
   logout: () => Promise<void>;
   forgotPassword: (email: string) => Promise<void>;
 };
@@ -1542,6 +1543,42 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
+  const updateUserProfile = async (updates: Partial<Pick<User, "name" | "phoneNumber">>) => {
+    if (!user) {
+      throw new Error("You must be logged in to update your profile.");
+    }
+
+    setIsLoading(true);
+
+    try {
+      const updatedUser: User = { ...user, ...updates, updatedAt: serverTimestamp() };
+
+      if (auth.currentUser && updates.name) {
+        await updateProfile(auth.currentUser, { displayName: updates.name });
+      }
+
+      try {
+        await updateDoc(doc(db, "users", user.id), {
+          ...updates,
+          updatedAt: serverTimestamp()
+        });
+      } catch {
+      }
+
+      const localAccount = readLocalOrganizerAccounts().find((account) => account.user.id === user.id);
+      if (localAccount) {
+        saveLocalOrganizerAccount(updatedUser, localAccount.password);
+      }
+      startLocalSession(updatedUser, true);
+      upsertLocalItem<User>(LOCAL_SESSION_KEY + "_users", updatedUser);
+      setUser(updatedUser);
+    } catch (error) {
+      throw new Error(getAuthErrorMessage(error));
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   return (
     <AuthContext.Provider
       value={{
@@ -1568,6 +1605,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         listPendingStudentRequests,
         decideStudentRequest,
         updateOrganizationSettings,
+        updateUserProfile,
         logout,
         forgotPassword
       }}
