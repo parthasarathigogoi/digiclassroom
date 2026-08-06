@@ -1612,6 +1612,265 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       });
   };
 
+  const inviteStudent = async ({ studentName, rollNumber, email, departmentId, semesterId, classId, subjectIds }: StudentInvitationInput) => {
+    if (!user || user.role !== "organizer") {
+      throw createAuthError("dc/unauthorized-access");
+    }
+
+    const normalizedEmail = email.trim().toLowerCase();
+
+    if (!INVITED_STUDENT_DOMAIN.test(normalizedEmail)) {
+      throw createAuthError("dc/student-gmail-required");
+    }
+
+    if (!departmentId || !semesterId || !classId || !Array.isArray(subjectIds) || subjectIds.length === 0) {
+      throw createAuthError("dc/student-missing-allocation");
+    }
+
+    const [departments, semesters, classes, subjects] = await Promise.all([
+      listDepartments(),
+      listSemesters(departmentId),
+      listAcademicClasses({ departmentId, semesterId }),
+      listSubjects({ departmentId, semesterId })
+    ]);
+
+    const department = departments.find((item) => item.id === departmentId);
+    const semester = semesters.find((item) => item.id === semesterId);
+    const academicClass = classes.find((item) => item.id === classId);
+    const selectedSubjects = subjects.filter((item) => subjectIds.includes(item.id));
+
+    if (!department || !semester || !academicClass || selectedSubjects.length === 0) {
+      throw createAuthError("dc/student-missing-allocation");
+    }
+
+    const invitationRef = doc(collection(db, "studentInvitations"));
+    const invitationWithoutToken: Omit<StudentInvitation, "token"> = {
+      id: invitationRef.id,
+      studentName: studentName.trim(),
+      rollNumber: rollNumber.trim(),
+      email: normalizedEmail,
+      departmentId,
+      department: department.name,
+      semesterId,
+      semester: semester.name,
+      classId,
+      classroomName: academicClass.name,
+      classSection: academicClass.section,
+      classJoinCode: academicClass.classCode,
+      subjectIds: selectedSubjects.map((item) => item.id),
+      subjects: selectedSubjects.map((item) => item.name),
+      status: "pending",
+      institutionId: user.institutionId || user.id,
+      institutionName: user.institution || DEFAULT_INSTITUTION,
+      invitedBy: user.id
+    };
+    const invitation: StudentInvitation = {
+      ...invitationWithoutToken,
+      token: encodeStudentInvitationToken(invitationWithoutToken)
+    };
+
+    try {
+      await setDoc(invitationRef, {
+        ...invitation,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp()
+      });
+    } catch {
+      saveLocalStudentInvitation(invitation);
+    }
+
+    return invitation;
+  };
+
+  const listStudentInvitations = async () => {
+    if (!user || user.role !== "organizer") {
+      throw createAuthError("dc/unauthorized-access");
+    }
+
+    const institutionId = user.institutionId || user.id;
+    try {
+      const invitationsQuery = query(collection(db, "studentInvitations"), where("institutionId", "==", institutionId));
+      const invitationSnapshot = await getDocs(invitationsQuery);
+
+      return invitationSnapshot.docs
+        .map((invitationDoc) => ({
+          id: invitationDoc.id,
+          ...(invitationDoc.data() as Omit<StudentInvitation, "id">)
+        }))
+        .sort((first, second) => first.studentName.localeCompare(second.studentName));
+    } catch {
+      return readLocalStudentInvitations()
+        .filter((invitation) => invitation.institutionId === institutionId)
+        .sort((first, second) => first.studentName.localeCompare(second.studentName));
+    }
+  };
+
+  const getStudentInvitation = async (token: string) => {
+    const localInvitation = readLocalStudentInvitations().find((invitation) => invitation.token === token);
+
+    if (localInvitation) {
+      if (localInvitation.status === "accepted") {
+        throw createAuthError("dc/invitation-completed");
+      }
+
+      return localInvitation;
+    }
+
+    try {
+      const invitationQuery = query(collection(db, "studentInvitations"), where("token", "==", token), limit(1));
+      const invitationSnapshot = await getDocs(invitationQuery);
+
+      if (!invitationSnapshot.empty) {
+        const invitationDoc = invitationSnapshot.docs[0];
+        const invitation = { id: invitationDoc.id, ...(invitationDoc.data() as Omit<StudentInvitation, "id">) };
+
+        if (invitation.status === "accepted") {
+          throw createAuthError("dc/invitation-completed");
+        }
+
+        return invitation;
+      }
+    } catch (error) {
+      if (isFirebaseAuthCode(error, "dc/invitation-completed")) {
+        throw error;
+      }
+    }
+
+    const tokenInvitation = decodeStudentInvitationToken(token);
+
+    if (tokenInvitation) {
+      return tokenInvitation;
+    }
+
+    throw createAuthError("dc/invitation-invalid");
+  };
+
+  const activateStudentInvitation = async ({ token, password }: StudentActivationInput) => {
+    setIsLoading(true);
+
+    try {
+      const invitation = await getStudentInvitation(token);
+      await setPersistence(auth, browserLocalPersistence);
+      let existingUserProfile: Awaited<ReturnType<typeof findUserProfileByEmail>> = null;
+
+      try {
+        existingUserProfile = await findUserProfileByEmail(invitation.email);
+      } catch {
+        existingUserProfile = null;
+      }
+
+      let userId = existingUserProfile?.id || "";
+      const displayName = existingUserProfile?.profile.name || invitation.studentName;
+
+      const nextUser: User = {
+        id: userId,
+        name: displayName,
+        email: invitation.email,
+        role: "student",
+        status: "active",
+        rollNumber: invitation.rollNumber,
+        institution: invitation.institutionName,
+        institutionId: invitation.institutionId,
+        departmentId: invitation.departmentId,
+        department: invitation.department,
+        semesterId: invitation.semesterId,
+        semester: invitation.semester,
+        classroomId: invitation.classId,
+        classroomName: invitation.classroomName,
+        classSection: invitation.classSection,
+        classJoinCode: invitation.classJoinCode
+      };
+
+      if (existingUserProfile) {
+        await setDoc(doc(db, "users", existingUserProfile.id), {
+          ...nextUser,
+          id: existingUserProfile.id,
+          subjectIds: invitation.subjectIds,
+          subjects: invitation.subjects,
+          invitationId: invitation.id,
+          updatedAt: serverTimestamp()
+        }, { merge: true });
+
+        nextUser.id = existingUserProfile.id;
+
+        startLocalSession(nextUser, true);
+      } else {
+        let firebaseUser: FirebaseUser;
+
+        try {
+          const credential = await createUserWithEmailAndPassword(auth, invitation.email, password);
+          firebaseUser = credential.user;
+        } catch (error) {
+          if (!isFirebaseAuthCode(error, "auth/email-already-in-use")) {
+            throw error;
+          }
+
+          nextUser.id = createLocalStudentId(invitation.email);
+
+          try {
+            await setDoc(doc(db, "users", nextUser.id), {
+              ...nextUser,
+              subjectIds: invitation.subjectIds,
+              subjects: invitation.subjects,
+              invitationId: invitation.id,
+              createdAt: serverTimestamp(),
+              updatedAt: serverTimestamp()
+            }, { merge: true });
+          } catch {
+          }
+
+          startLocalSession(nextUser, true);
+          setUser(nextUser);
+
+          try {
+            await updateDoc(doc(db, "studentInvitations", invitation.id), {
+              status: "accepted",
+              acceptedBy: nextUser.id,
+              acceptedAt: serverTimestamp(),
+              updatedAt: serverTimestamp()
+            });
+          } catch {
+            updateLocalStudentInvitation(invitation.id, { status: "accepted" });
+          }
+
+          return nextUser;
+        }
+
+        await updateProfile(firebaseUser, { displayName });
+        nextUser.id = firebaseUser.uid;
+
+        await setDoc(doc(db, "users", firebaseUser.uid), {
+          ...nextUser,
+          subjectIds: invitation.subjectIds,
+          subjects: invitation.subjects,
+          invitationId: invitation.id,
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp()
+        }, { merge: true });
+
+        startLocalSession(nextUser, true);
+      }
+
+      try {
+        await updateDoc(doc(db, "studentInvitations", invitation.id), {
+          status: "accepted",
+          acceptedBy: nextUser.id,
+          acceptedAt: serverTimestamp(),
+          updatedAt: serverTimestamp()
+        });
+      } catch {
+        updateLocalStudentInvitation(invitation.id, { status: "accepted" });
+      }
+
+      setUser(nextUser);
+      return nextUser;
+    } catch (error) {
+      throw new Error(getAuthErrorMessage(error));
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   const decideStudentRequest = async (studentId: string, decision: "approve" | "reject") => {
     if (!user || !["organizer", "teacher"].includes(user.role)) {
       throw createAuthError("dc/unauthorized-access");
@@ -1740,6 +1999,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         activateTeacherInvitation,
         getTeacherInvitation,
         listTeacherInvitations,
+        inviteStudent,
+        activateStudentInvitation,
+        getStudentInvitation,
+        listStudentInvitations,
         createDepartment,
         listDepartments,
         createSemester,
