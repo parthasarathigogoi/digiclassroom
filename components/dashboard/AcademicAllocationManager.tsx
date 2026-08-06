@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { BookOpen, Building2, Loader2, Plus, Presentation, RefreshCw } from "lucide-react";
+import { BookOpen, Building2, Loader2, Plus, Presentation, RefreshCw, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import {
   type AcademicClass,
@@ -24,7 +24,10 @@ const AcademicAllocationManager: React.FC<AcademicAllocationManagerProps> = ({ m
     createAcademicClass,
     listAcademicClasses,
     createSubject,
-    listSubjects
+    listSubjects,
+    removeDepartment,
+    removeAcademicClass,
+    removeSubject
   } = useAuth();
   const [departments, setDepartments] = useState<AcademicDepartment[]>([]);
   const [semesters, setSemesters] = useState<AcademicSemester[]>([]);
@@ -139,6 +142,60 @@ const AcademicAllocationManager: React.FC<AcademicAllocationManagerProps> = ({ m
     }
   };
 
+  const handleRemoveDepartment = async (departmentId: string) => {
+    const confirmed = window.confirm("Remove this department and all related semesters, classes, and subjects?");
+    if (!confirmed) {
+      return;
+    }
+
+    setIsSaving(true);
+    try {
+      await removeDepartment(departmentId);
+      await loadAcademicStructure();
+      toast.success("Department removed.");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Unable to remove department.");
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleRemoveClass = async (classId: string) => {
+    const confirmed = window.confirm("Remove this class and its classroom record?");
+    if (!confirmed) {
+      return;
+    }
+
+    setIsSaving(true);
+    try {
+      await removeAcademicClass(classId);
+      await loadAcademicStructure();
+      toast.success("Class removed.");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Unable to remove class.");
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleRemoveSubject = async (subjectId: string) => {
+    const confirmed = window.confirm("Remove this subject?");
+    if (!confirmed) {
+      return;
+    }
+
+    setIsSaving(true);
+    try {
+      await removeSubject(subjectId);
+      await loadAcademicStructure();
+      toast.success("Subject removed.");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Unable to remove subject.");
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
   const title = mode === "departments" ? "Departments & Semesters" : mode === "classes" ? "Classes / Sections" : "Subjects";
   const eyebrow = mode === "departments" ? "Academic Structure" : mode === "classes" ? "Class Allocation" : "Subject Allocation";
   const Icon = mode === "departments" ? Building2 : mode === "classes" ? Presentation : BookOpen;
@@ -229,15 +286,32 @@ const AcademicAllocationManager: React.FC<AcademicAllocationManagerProps> = ({ m
               {mode === "subjects" && subjects.length === 0 ? <EmptyState text="No subjects created yet." /> : null}
 
               {mode === "departments" ? departments.map((department) => (
-                <RecordRow key={department.id} title={department.name} detail={`${department.code} · ${semesters.filter((semester) => semester.departmentId === department.id).length} semesters`} />
+                <RecordRow
+                  key={department.id}
+                  title={department.name}
+                  detail={`${department.code} · ${semesters.filter((semester) => semester.departmentId === department.id).length} semesters`}
+                  onRemove={() => void handleRemoveDepartment(department.id)}
+                />
               )) : null}
               {mode === "classes" ? classes.map((academicClass) => (
-                <RecordRow key={academicClass.id} title={`${academicClass.name} · ${academicClass.section}`} detail={`${academicClass.departmentName} · ${academicClass.semesterName} · Code ${academicClass.classCode}`} />
+                <RecordRow
+                  key={academicClass.id}
+                  title={`${academicClass.name} · ${academicClass.section}`}
+                  detail={`${academicClass.departmentName} · ${academicClass.semesterName} · Code ${academicClass.classCode}`}
+                  onRemove={() => void handleRemoveClass(academicClass.id)}
+                />
               )) : null}
               {mode === "subjects" ? subjects.map((subject) => {
                 const department = departments.find((item) => item.id === subject.departmentId);
                 const semester = semesters.find((item) => item.id === subject.semesterId);
-                return <RecordRow key={subject.id} title={subject.name} detail={`${subject.code} · ${department?.name || "Department"} · ${semester?.name || "Semester"}`} />;
+                return (
+                  <RecordRow
+                    key={subject.id}
+                    title={subject.name}
+                    detail={`${subject.code} · ${department?.name || "Department"} · ${semester?.name || "Semester"}`}
+                    onRemove={() => void handleRemoveSubject(subject.id)}
+                  />
+                );
               }) : null}
             </div>
           </section>
@@ -253,10 +327,21 @@ const EmptyState: React.FC<{ text: string }> = ({ text }) => (
   </div>
 );
 
-const RecordRow: React.FC<{ title: string; detail: string }> = ({ title, detail }) => (
-  <div className="rounded-2xl border border-slate-100 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-950">
-    <p className="font-black text-ink dark:text-white">{title}</p>
-    <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">{detail}</p>
+const RecordRow: React.FC<{ title: string; detail: string; onRemove?: () => void }> = ({ title, detail, onRemove }) => (
+  <div className="flex items-start justify-between gap-3 rounded-2xl border border-slate-100 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-950">
+    <div>
+      <p className="font-black text-ink dark:text-white">{title}</p>
+      <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">{detail}</p>
+    </div>
+    {onRemove ? (
+      <button
+        type="button"
+        onClick={onRemove}
+        className="inline-flex items-center gap-2 rounded-lg border border-rose-200 px-3 py-2 text-xs font-bold text-rose-700 transition hover:bg-rose-50 dark:border-rose-900 dark:text-rose-300 dark:hover:bg-rose-950"
+      >
+        <Trash2 size={14} /> Remove
+      </button>
+    ) : null}
   </div>
 );
 

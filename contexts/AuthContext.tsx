@@ -15,6 +15,7 @@ import {
 } from "firebase/auth";
 import {
   collection,
+  deleteDoc,
   doc,
   getDoc,
   getDocs,
@@ -275,18 +276,27 @@ type AuthContextType = {
   activateTeacherInvitation: (input: TeacherActivationInput) => Promise<User>;
   getTeacherInvitation: (token: string) => Promise<TeacherInvitation>;
   listTeacherInvitations: () => Promise<TeacherInvitation[]>;
+  removeTeacherInvitation: (invitationId: string) => Promise<void>;
+  listTeachers: () => Promise<User[]>;
+  removeTeacher: (teacherId: string) => Promise<void>;
   inviteStudent: (input: StudentInvitationInput) => Promise<StudentInvitation>;
   activateStudentInvitation: (input: StudentActivationInput) => Promise<User>;
   getStudentInvitation: (token: string) => Promise<StudentInvitation>;
   listStudentInvitations: () => Promise<StudentInvitation[]>;
+  removeStudentInvitation: (invitationId: string) => Promise<void>;
+  listStudents: () => Promise<User[]>;
+  removeStudent: (studentId: string) => Promise<void>;
   createDepartment: (input: Pick<AcademicDepartment, "name" | "code">) => Promise<AcademicDepartment>;
   listDepartments: () => Promise<AcademicDepartment[]>;
+  removeDepartment: (departmentId: string) => Promise<void>;
   createSemester: (input: Pick<AcademicSemester, "name" | "departmentId">) => Promise<AcademicSemester>;
   listSemesters: (departmentId?: string) => Promise<AcademicSemester[]>;
   createAcademicClass: (input: Omit<AcademicClass, "id" | "institutionId" | "departmentName" | "semesterName">) => Promise<AcademicClass>;
   listAcademicClasses: (filters?: { departmentId?: string; semesterId?: string }) => Promise<AcademicClass[]>;
+  removeAcademicClass: (classId: string) => Promise<void>;
   createSubject: (input: Pick<AcademicSubject, "name" | "code" | "departmentId" | "semesterId">) => Promise<AcademicSubject>;
   listSubjects: (filters?: { departmentId?: string; semesterId?: string }) => Promise<AcademicSubject[]>;
+  removeSubject: (subjectId: string) => Promise<void>;
   allocateTeacher: (input: TeacherAllocationInput) => Promise<void>;
   allocateStudent: (input: StudentAllocationInput & { approve?: boolean }) => Promise<void>;
   listPendingStudentRequests: () => Promise<StudentAccessRequest[]>;
@@ -478,6 +488,11 @@ const writeLocalItems = <T,>(key: string, items: T[]) => {
 const upsertLocalItem = <T extends { id: string }>(key: string, item: T) => {
   const items = readLocalItems<T>(key);
   writeLocalItems(key, items.some((current) => current.id === item.id) ? items.map((current) => (current.id === item.id ? item : current)) : [item, ...items]);
+};
+
+const removeLocalItemById = <T extends { id: string }>(key: string, id: string) => {
+  const items = readLocalItems<T>(key).filter((item) => item.id !== id);
+  writeLocalItems(key, items);
 };
 
 const isFirebaseAuthCode = (error: unknown, code: string) => {
@@ -1169,6 +1184,59 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
+  const removeTeacherInvitation = async (invitationId: string) => {
+    if (!user || user.role !== "organizer") {
+      throw createAuthError("dc/unauthorized-access");
+    }
+
+    await deleteDoc(doc(db, "teacherInvitations", invitationId));
+    removeLocalItemById<TeacherInvitation>(LOCAL_TEACHER_INVITATIONS_KEY, invitationId);
+  };
+
+  const listTeachers = async () => {
+    if (!user || user.role !== "organizer") {
+      throw createAuthError("dc/unauthorized-access");
+    }
+
+    const institutionId = user.institutionId || user.id;
+    const teacherQuery = query(collection(db, "users"), where("role", "==", "teacher"), where("institutionId", "==", institutionId));
+    const snapshot = await getDocs(teacherQuery);
+
+    return snapshot.docs.map((teacherDoc) => {
+      const profile = teacherDoc.data() as StoredProfile;
+      return {
+        id: teacherDoc.id,
+        name: profile.name || "Teacher",
+        email: profile.email || "",
+        role: normalizeRole(profile.role),
+        status: profile.status || "active",
+        institution: profile.institution || profile.institutionName || DEFAULT_INSTITUTION,
+        institutionId: profile.institutionId,
+        classroomId: profile.classroomId,
+        classroomName: profile.classroomName,
+        department: profile.department,
+        departmentId: profile.departmentId,
+        semester: profile.semester,
+        semesterId: profile.semesterId,
+        classSection: profile.classSection,
+        subject: profile.subject,
+        subjectId: profile.subjectId,
+        institutionType: profile.institutionType,
+        phoneNumber: profile.phoneNumber,
+        rollNumber: profile.rollNumber,
+        classJoinCode: profile.classJoinCode
+      } as User;
+    });
+  };
+
+  const removeTeacher = async (teacherId: string) => {
+    if (!user || user.role !== "organizer") {
+      throw createAuthError("dc/unauthorized-access");
+    }
+
+    await deleteDoc(doc(db, "users", teacherId));
+  };
+
   const getTeacherInvitation = async (token: string) => {
     const localInvitation = readLocalTeacherInvitations().find((invitation) => invitation.token === token);
 
@@ -1352,6 +1420,25 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return department;
   };
 
+  const removeDepartment = async (departmentId: string) => {
+    requireOrganizerInstitutionId();
+
+    const [semesterQuery, classQuery, subjectQuery] = await Promise.all([
+      getDocs(query(collection(db, "academicSemesters"), where("departmentId", "==", departmentId))),
+      getDocs(query(collection(db, "academicClasses"), where("departmentId", "==", departmentId))),
+      getDocs(query(collection(db, "academicSubjects"), where("departmentId", "==", departmentId)))
+    ]);
+
+    await Promise.all([
+      ...semesterQuery.docs.map((item) => deleteDoc(doc(db, "academicSemesters", item.id))),
+      ...classQuery.docs.map((item) => deleteDoc(doc(db, "academicClasses", item.id))),
+      ...subjectQuery.docs.map((item) => deleteDoc(doc(db, "academicSubjects", item.id)))
+    ]);
+
+    await deleteDoc(doc(db, "academicDepartments", departmentId));
+    removeLocalItemById<AcademicDepartment>(LOCAL_DEPARTMENTS_KEY, departmentId);
+  };
+
   const listDepartments = async () => {
     const institutionId = user?.institutionId || (user?.role === "organizer" ? user.id : undefined);
 
@@ -1451,6 +1538,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return academicClass;
   };
 
+  const removeAcademicClass = async (classId: string) => {
+    requireOrganizerInstitutionId();
+
+    await deleteDoc(doc(db, "academicClasses", classId));
+    try {
+      await deleteDoc(doc(db, "classrooms", classId));
+    } catch {
+      // Ignore missing classroom document.
+    }
+    removeLocalItemById<AcademicClass>(LOCAL_CLASSES_KEY, classId);
+  };
+
   const listAcademicClasses = async (filters?: { departmentId?: string; semesterId?: string }) => {
     const institutionId = user?.institutionId || (user?.role === "organizer" ? user.id : undefined);
     const filterItems = (items: AcademicClass[]) => items
@@ -1487,6 +1586,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
 
     return subject;
+  };
+
+  const removeSubject = async (subjectId: string) => {
+    requireOrganizerInstitutionId();
+
+    await deleteDoc(doc(db, "academicSubjects", subjectId));
+    removeLocalItemById<AcademicSubject>(LOCAL_SUBJECTS_KEY, subjectId);
   };
 
   const listSubjects = async (filters?: { departmentId?: string; semesterId?: string }) => {
@@ -1652,6 +1758,57 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
         return !user.institutionId || student.institutionId === user.institutionId || student.institution === user.institution;
       });
+  };
+
+  const removeStudentInvitation = async (invitationId: string) => {
+    if (!user || user.role !== "organizer") {
+      throw createAuthError("dc/unauthorized-access");
+    }
+
+    await deleteDoc(doc(db, "studentInvitations", invitationId));
+    removeLocalItemById<StudentInvitation>(LOCAL_STUDENT_INVITATIONS_KEY, invitationId);
+  };
+
+  const listStudents = async () => {
+    if (!user || user.role !== "organizer") {
+      throw createAuthError("dc/unauthorized-access");
+    }
+
+    const institutionId = user.institutionId || user.id;
+    const studentQuery = query(collection(db, "users"), where("role", "==", "student"), where("institutionId", "==", institutionId));
+    const snapshot = await getDocs(studentQuery);
+
+    return snapshot.docs.map((studentDoc) => {
+      const profile = studentDoc.data() as StoredProfile;
+      return {
+        id: studentDoc.id,
+        name: profile.name || "Student",
+        email: profile.email || "",
+        role: normalizeRole(profile.role),
+        status: profile.status || "active",
+        institution: profile.institution || profile.institutionName || DEFAULT_INSTITUTION,
+        institutionId: profile.institutionId,
+        classroomId: profile.classroomId,
+        classroomName: profile.classroomName,
+        department: profile.department,
+        departmentId: profile.departmentId,
+        semester: profile.semester,
+        semesterId: profile.semesterId,
+        classSection: profile.classSection,
+        institutionType: profile.institutionType,
+        phoneNumber: profile.phoneNumber,
+        rollNumber: profile.rollNumber,
+        classJoinCode: profile.classJoinCode
+      } as User;
+    });
+  };
+
+  const removeStudent = async (studentId: string) => {
+    if (!user || user.role !== "organizer") {
+      throw createAuthError("dc/unauthorized-access");
+    }
+
+    await deleteDoc(doc(db, "users", studentId));
   };
 
   const inviteStudent = async ({ studentName, rollNumber, email, departmentId, semesterId, classId, subjectIds }: StudentInvitationInput) => {
@@ -2041,18 +2198,27 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         activateTeacherInvitation,
         getTeacherInvitation,
         listTeacherInvitations,
+        removeTeacherInvitation,
+        listTeachers,
+        removeTeacher,
         inviteStudent,
         activateStudentInvitation,
         getStudentInvitation,
         listStudentInvitations,
+        removeStudentInvitation,
+        listStudents,
+        removeStudent,
         createDepartment,
         listDepartments,
+        removeDepartment,
         createSemester,
         listSemesters,
         createAcademicClass,
         listAcademicClasses,
+        removeAcademicClass,
         createSubject,
         listSubjects,
+        removeSubject,
         allocateTeacher,
         allocateStudent,
         listPendingStudentRequests,

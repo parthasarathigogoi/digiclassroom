@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Copy, GraduationCap, Loader2, MailPlus, RefreshCw, Send, UserCheck } from "lucide-react";
+import { Copy, GraduationCap, Loader2, MailPlus, RefreshCw, Send, Trash2, UserCheck } from "lucide-react";
 import { toast } from "sonner";
 import Link from "next/link";
 import {
@@ -10,6 +10,7 @@ import {
   type AcademicSemester,
   type AcademicSubject,
   type StudentInvitation,
+  type User,
   useAuth
 } from "@/contexts/AuthContext";
 
@@ -18,14 +19,18 @@ const OrganizerStudentsPage: React.FC = () => {
     inviteStudent,
     isLoading,
     listStudentInvitations,
+    listStudents,
     user,
     listDepartments,
     listSemesters,
     listAcademicClasses,
-    listSubjects
+    listSubjects,
+    removeStudentInvitation,
+    removeStudent
   } = useAuth();
   const [activationLink, setActivationLink] = useState("");
   const [invitations, setInvitations] = useState<StudentInvitation[]>([]);
+  const [students, setStudents] = useState<User[]>([]);
   const [departments, setDepartments] = useState<AcademicDepartment[]>([]);
   const [semesters, setSemesters] = useState<AcademicSemester[]>([]);
   const [classes, setClasses] = useState<AcademicClass[]>([]);
@@ -75,9 +80,10 @@ const OrganizerStudentsPage: React.FC = () => {
     setIsRefreshing(true);
 
     try {
-      const [nextInvitations, nextDepartments] = await Promise.all([
+      const [nextInvitations, nextDepartments, nextStudents] = await Promise.all([
         listStudentInvitationsRef.current(),
-        allocationLoadersRef.current.listDepartments()
+        allocationLoadersRef.current.listDepartments(),
+        listStudents()
       ]);
 
       const deptIds = nextDepartments.map((item) => item.id);
@@ -103,6 +109,7 @@ const OrganizerStudentsPage: React.FC = () => {
       ]);
 
       setInvitations(nextInvitations);
+      setStudents(nextStudents);
       setDepartments(nextDepartments);
       setSemesters(nextSemesters);
       setClasses(nextClasses);
@@ -145,6 +152,36 @@ const OrganizerStudentsPage: React.FC = () => {
   const copyLink = async () => {
     await navigator.clipboard.writeText(activationLink);
     toast.success("Invitation link copied.");
+  };
+
+  const handleRemoveInvitation = async (invitationId: string) => {
+    const confirmed = window.confirm("Remove this student invitation?");
+    if (!confirmed) {
+      return;
+    }
+
+    try {
+      await removeStudentInvitation(invitationId);
+      setInvitations((current) => current.filter((item) => item.id !== invitationId));
+      toast.success("Student invitation removed.");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Unable to remove student invitation.");
+    }
+  };
+
+  const handleRemoveStudent = async (studentId: string) => {
+    const confirmed = window.confirm("Remove this student account from the organization?");
+    if (!confirmed) {
+      return;
+    }
+
+    try {
+      await removeStudent(studentId);
+      setStudents((current) => current.filter((item) => item.id !== studentId));
+      toast.success("Student removed.");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Unable to remove student.");
+    }
   };
 
   const filteredSemesters = semesters.filter((s) => s.departmentId === formData.departmentId);
@@ -356,6 +393,60 @@ const OrganizerStudentsPage: React.FC = () => {
       <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-900">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
+            <h2 className="text-xl font-black text-ink dark:text-white">Active Students</h2>
+            <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">Manage student accounts that are already linked to your organization.</p>
+          </div>
+          <button type="button" onClick={refreshInvitations} disabled={isRefreshing} className="inline-flex w-fit items-center gap-2 rounded-xl border border-slate-200 px-4 py-2 text-sm font-bold text-slate-700 transition hover:bg-slate-50 disabled:opacity-60 dark:border-slate-800 dark:text-slate-200 dark:hover:bg-slate-800">
+            <RefreshCw className={isRefreshing ? "animate-spin" : ""} size={16} />
+            Refresh
+          </button>
+        </div>
+
+        <div className="mt-5 overflow-hidden rounded-xl border border-slate-200 dark:border-slate-800">
+          <table className="w-full min-w-[720px] text-left text-sm">
+            <thead className="bg-slate-50 text-xs font-black uppercase tracking-[0.16em] text-slate-500 dark:bg-slate-950 dark:text-slate-400">
+              <tr>
+                <th className="px-4 py-3">Student</th>
+                <th className="px-4 py-3">Roll</th>
+                <th className="px-4 py-3">Email</th>
+                <th className="px-4 py-3">Class</th>
+                <th className="px-4 py-3 text-right">Actions</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
+              {students.length ? (
+                students.map((student) => (
+                  <tr key={student.id} className="bg-white dark:bg-slate-900">
+                    <td className="px-4 py-4 font-bold text-ink dark:text-white">{student.name}</td>
+                    <td className="px-4 py-4 text-slate-600 dark:text-slate-300">{student.rollNumber || "—"}</td>
+                    <td className="px-4 py-4 text-slate-600 dark:text-slate-300">{student.email}</td>
+                    <td className="px-4 py-4 text-slate-600 dark:text-slate-300">{student.classroomName ? `${student.classroomName} · ${student.classSection || "Section"}` : "No class yet"}</td>
+                    <td className="px-4 py-4 text-right">
+                      <button
+                        type="button"
+                        onClick={() => void handleRemoveStudent(student.id)}
+                        className="inline-flex items-center gap-2 rounded-lg border border-rose-200 px-3 py-2 text-xs font-bold text-rose-700 transition hover:bg-rose-50 dark:border-rose-900 dark:text-rose-300 dark:hover:bg-rose-950"
+                      >
+                        <Trash2 size={14} /> Remove
+                      </button>
+                    </td>
+                  </tr>
+                ))
+              ) : (
+                <tr className="bg-white dark:bg-slate-900">
+                  <td colSpan={5} className="px-4 py-8 text-center text-sm font-medium text-slate-500">
+                    {isRefreshing ? "Loading students..." : "No active students yet."}
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div>
             <h2 className="text-xl font-black text-ink dark:text-white">Student Invitation Status</h2>
             <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">Pending students can join from the invitation email. Accepted students are already active in their allocated class.</p>
           </div>
@@ -375,6 +466,7 @@ const OrganizerStudentsPage: React.FC = () => {
                 <th className="px-4 py-3">Class Allocation</th>
                 <th className="px-4 py-3">Subjects</th>
                 <th className="px-4 py-3">Status</th>
+                <th className="px-4 py-3 text-right">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
@@ -406,11 +498,20 @@ const OrganizerStudentsPage: React.FC = () => {
                         {invitation.status === "accepted" ? "Joined" : "Pending"}
                       </span>
                     </td>
+                    <td className="px-4 py-4 text-right">
+                      <button
+                        type="button"
+                        onClick={() => void handleRemoveInvitation(invitation.id)}
+                        className="inline-flex items-center gap-2 rounded-lg border border-rose-200 px-3 py-2 text-xs font-bold text-rose-700 transition hover:bg-rose-50 dark:border-rose-900 dark:text-rose-300 dark:hover:bg-rose-950"
+                      >
+                        <Trash2 size={14} /> Remove
+                      </button>
+                    </td>
                   </tr>
                 ))
               ) : (
                 <tr className="bg-white dark:bg-slate-900">
-                  <td colSpan={6} className="px-4 py-8 text-center text-sm font-medium text-slate-500">
+                  <td colSpan={7} className="px-4 py-8 text-center text-sm font-medium text-slate-500">
                     {isRefreshing ? "Loading student invitations..." : "No student invitations yet."}
                   </td>
                 </tr>

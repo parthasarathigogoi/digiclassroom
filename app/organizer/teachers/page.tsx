@@ -1,14 +1,28 @@
 "use client";
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Copy, Loader2, MailPlus, RefreshCw, Send, UserCog } from "lucide-react";
+import { Copy, Loader2, MailPlus, RefreshCw, Send, Trash2, UserCog } from "lucide-react";
 import { toast } from "sonner";
-import { type AcademicClass, type AcademicDepartment, type AcademicSemester, type AcademicSubject, type TeacherInvitation, useAuth } from "@/contexts/AuthContext";
+import { type AcademicClass, type AcademicDepartment, type AcademicSemester, type AcademicSubject, type TeacherInvitation, type User, useAuth } from "@/contexts/AuthContext";
 
 const OrganizerTeachersPage: React.FC = () => {
-  const { inviteTeacher, isLoading, listTeacherInvitations, user, listDepartments, listSemesters, listAcademicClasses, listSubjects, allocateTeacher } = useAuth();
+  const {
+    inviteTeacher,
+    isLoading,
+    listTeacherInvitations,
+    listTeachers,
+    user,
+    listDepartments,
+    listSemesters,
+    listAcademicClasses,
+    listSubjects,
+    allocateTeacher,
+    removeTeacherInvitation,
+    removeTeacher
+  } = useAuth();
   const [activationLink, setActivationLink] = useState("");
   const [invitations, setInvitations] = useState<TeacherInvitation[]>([]);
+  const [teachers, setTeachers] = useState<User[]>([]);
   const [departments, setDepartments] = useState<AcademicDepartment[]>([]);
   const [semesters, setSemesters] = useState<AcademicSemester[]>([]);
   const [classes, setClasses] = useState<AcademicClass[]>([]);
@@ -61,9 +75,10 @@ const OrganizerTeachersPage: React.FC = () => {
     setIsRefreshing(true);
 
     try {
-      const [nextInvitations, nextDepartments] = await Promise.all([
+      const [nextInvitations, nextDepartments, nextTeachers] = await Promise.all([
         listTeacherInvitationsRef.current(),
-        allocationLoadersRef.current.listDepartments()
+        allocationLoadersRef.current.listDepartments(),
+        listTeachers()
       ]);
 
       const deptIds = nextDepartments.map((item) => item.id);
@@ -89,6 +104,7 @@ const OrganizerTeachersPage: React.FC = () => {
       ]);
 
       setInvitations(nextInvitations);
+      setTeachers(nextTeachers);
       setDepartments(nextDepartments);
       setSemesters(nextSemesters);
       setClasses(nextClasses);
@@ -121,6 +137,36 @@ const OrganizerTeachersPage: React.FC = () => {
   const copyLink = async () => {
     await navigator.clipboard.writeText(activationLink);
     toast.success("Invitation link copied.");
+  };
+
+  const handleRemoveInvitation = async (invitationId: string) => {
+    const confirmed = window.confirm("Remove this teacher invitation?");
+    if (!confirmed) {
+      return;
+    }
+
+    try {
+      await removeTeacherInvitation(invitationId);
+      setInvitations((current) => current.filter((item) => item.id !== invitationId));
+      toast.success("Teacher invitation removed.");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Unable to remove teacher invitation.");
+    }
+  };
+
+  const handleRemoveTeacher = async (teacherId: string) => {
+    const confirmed = window.confirm("Remove this teacher account from the organization?");
+    if (!confirmed) {
+      return;
+    }
+
+    try {
+      await removeTeacher(teacherId);
+      setTeachers((current) => current.filter((item) => item.id !== teacherId));
+      toast.success("Teacher removed.");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Unable to remove teacher.");
+    }
   };
 
   const allocateTeacherScope = async (event: React.FormEvent) => {
@@ -224,6 +270,7 @@ const OrganizerTeachersPage: React.FC = () => {
                 <th className="px-4 py-3">Teacher</th>
                 <th className="px-4 py-3">Email</th>
                 <th className="px-4 py-3">Status</th>
+                <th className="px-4 py-3 text-right">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
@@ -239,12 +286,73 @@ const OrganizerTeachersPage: React.FC = () => {
                         {invitation.status === "accepted" ? "Joined" : "Pending"}
                       </span>
                     </td>
+                    <td className="px-4 py-4 text-right">
+                      <button
+                        type="button"
+                        onClick={() => void handleRemoveInvitation(invitation.id)}
+                        className="inline-flex items-center gap-2 rounded-lg border border-rose-200 px-3 py-2 text-xs font-bold text-rose-700 transition hover:bg-rose-50 dark:border-rose-900 dark:text-rose-300 dark:hover:bg-rose-950"
+                      >
+                        <Trash2 size={14} /> Remove
+                      </button>
+                    </td>
                   </tr>
                 ))
               ) : (
                 <tr className="bg-white dark:bg-slate-900">
-                  <td colSpan={3} className="px-4 py-8 text-center text-sm font-medium text-slate-500">
+                  <td colSpan={4} className="px-4 py-8 text-center text-sm font-medium text-slate-500">
                     {isRefreshing ? "Loading teacher invitations..." : "No teacher invitations yet."}
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h2 className="text-xl font-black text-ink dark:text-white">Active Teachers</h2>
+            <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">Manage teacher accounts that are already linked to your organization.</p>
+          </div>
+          <button type="button" onClick={refreshInvitations} disabled={isRefreshing} className="inline-flex w-fit items-center gap-2 rounded-xl border border-slate-200 px-4 py-2 text-sm font-bold text-slate-700 transition hover:bg-slate-50 disabled:opacity-60 dark:border-slate-800 dark:text-slate-200 dark:hover:bg-slate-800">
+            <RefreshCw className={isRefreshing ? "animate-spin" : ""} size={16} />
+            Refresh
+          </button>
+        </div>
+
+        <div className="mt-5 overflow-hidden rounded-xl border border-slate-200 dark:border-slate-800">
+          <table className="w-full min-w-[640px] text-left text-sm">
+            <thead className="bg-slate-50 text-xs font-black uppercase tracking-[0.16em] text-slate-500 dark:bg-slate-950 dark:text-slate-400">
+              <tr>
+                <th className="px-4 py-3">Teacher</th>
+                <th className="px-4 py-3">Email</th>
+                <th className="px-4 py-3">Allocation</th>
+                <th className="px-4 py-3 text-right">Actions</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
+              {teachers.length ? (
+                teachers.map((teacher) => (
+                  <tr key={teacher.id} className="bg-white dark:bg-slate-900">
+                    <td className="px-4 py-4 font-bold text-ink dark:text-white">{teacher.name}</td>
+                    <td className="px-4 py-4 text-slate-600 dark:text-slate-300">{teacher.email}</td>
+                    <td className="px-4 py-4 text-slate-600 dark:text-slate-300">{teacher.department ? `${teacher.department} · ${teacher.classSection || teacher.subject || "Allocated"}` : "No allocation yet"}</td>
+                    <td className="px-4 py-4 text-right">
+                      <button
+                        type="button"
+                        onClick={() => void handleRemoveTeacher(teacher.id)}
+                        className="inline-flex items-center gap-2 rounded-lg border border-rose-200 px-3 py-2 text-xs font-bold text-rose-700 transition hover:bg-rose-50 dark:border-rose-900 dark:text-rose-300 dark:hover:bg-rose-950"
+                      >
+                        <Trash2 size={14} /> Remove
+                      </button>
+                    </td>
+                  </tr>
+                ))
+              ) : (
+                <tr className="bg-white dark:bg-slate-900">
+                  <td colSpan={4} className="px-4 py-8 text-center text-sm font-medium text-slate-500">
+                    {isRefreshing ? "Loading teachers..." : "No active teachers yet."}
                   </td>
                 </tr>
               )}
