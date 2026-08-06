@@ -157,6 +157,10 @@ export const canAccessAllocationScope = (user: User | null, scope: AllocationSco
     return !scope.institutionId || user.institutionId === scope.institutionId || user.id === scope.institutionId;
   }
 
+  if (user.role === "student" && user.status !== "active") {
+    return false;
+  }
+
   if (scope.institutionId && user.institutionId !== scope.institutionId) {
     return false;
   }
@@ -194,10 +198,6 @@ type StudentJoinRequestInput = {
   email: string;
   rollNumber: string;
   password: string;
-  departmentId: string;
-  semesterId: string;
-  classId: string;
-  classJoinCode?: string;
 };
 
 type TeacherInvitationInput = {
@@ -231,6 +231,7 @@ type AuthContextType = {
   login: (email: string, password: string, rememberMe?: boolean, expectedRole?: UserRole) => Promise<User>;
   registerOrganizer: (input: OrganizerRegistrationInput) => Promise<User>;
   requestStudentAccess: (input: StudentJoinRequestInput) => Promise<void>;
+  joinClassWithCode: (classJoinCode: string) => Promise<void>;
   inviteTeacher: (input: TeacherInvitationInput) => Promise<TeacherInvitation>;
   activateTeacherInvitation: (input: TeacherActivationInput) => Promise<User>;
   getTeacherInvitation: (token: string) => Promise<TeacherInvitation>;
@@ -644,11 +645,10 @@ const loadAuthorizedUser = async (firebaseUser: FirebaseUser, expectedRole?: Use
     }
   }
 
-  if (nextUser.role === "student" && nextUser.status !== "active") {
+  if (nextUser.role === "student" && nextUser.status === "rejected") {
     if (nextUser.status === "rejected") {
       throw createAuthError("dc/student-rejected");
     }
-    throw createAuthError("dc/student-pending-approval");
   }
 
   if (!["organizer", "teacher", "student"].includes(nextUser.role)) {
@@ -677,15 +677,27 @@ const findClassroomByJoinCode = async (classJoinCode: string) => {
 
   if (!classroomSnapshot.empty) {
     const classroomDoc = classroomSnapshot.docs[0];
-    return {
+    const classroom = {
       id: classroomDoc.id,
       ...(classroomDoc.data() as {
         name?: string;
         institutionId?: string;
         institutionName?: string;
         joinCode?: string;
+        departmentId?: string;
+        departmentName?: string;
+        semesterId?: string;
+        semesterName?: string;
+        section?: string;
+        isActive?: boolean;
       })
     };
+
+    if (classroom.isActive === false) {
+      throw createAuthError("dc/class-code-invalid");
+    }
+
+    return classroom;
   }
 
   throw createAuthError("dc/class-code-invalid");
@@ -861,61 +873,85 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     fullName,
     email,
     rollNumber,
-    password,
-    departmentId,
-    semesterId,
-    classId,
-    classJoinCode
+    password
   }: StudentJoinRequestInput) => {
     setIsLoading(true);
 
     try {
-      const classes = await listAcademicClasses({ departmentId, semesterId });
-      const academicClass = classes.find((item) => item.id === classId);
-
-      if (!academicClass) {
-        throw createAuthError("dc/class-code-invalid");
-      }
-
-      const normalizedClassCode = classJoinCode?.trim().toUpperCase() || "";
-
-      if (normalizedClassCode && normalizedClassCode !== academicClass.classCode.toUpperCase()) {
-        throw createAuthError("dc/class-code-invalid");
-      }
-
-      await setPersistence(auth, browserLocalPersistence);
+      await setPersistence(auth, browserSessionPersistence);
       const credential = await createUserWithEmailAndPassword(auth, email, password);
       await updateProfile(credential.user, { displayName: fullName });
 
-      await setDoc(doc(db, "users", credential.user.uid), {
+      const nextUser: User = {
         id: credential.user.uid,
         name: fullName,
         email,
         role: "student",
-        status: "pending_approval",
-        institution: user?.institution || DEFAULT_INSTITUTION,
-        institutionId: academicClass.institutionId,
-        departmentId,
-        department: academicClass.departmentName,
-        semesterId,
-        semester: academicClass.semesterName,
-        classroomId: academicClass.id,
-        classroomName: academicClass.name,
-        classSection: academicClass.section,
-        rollNumber,
-        classJoinCode: normalizedClassCode || academicClass.classCode,
+        status: "active",
+        rollNumber
+      };
+
+      await setDoc(doc(db, "users", credential.user.uid), {
+        ...nextUser,
         createdAt: serverTimestamp(),
-        updatedAt: serverTimestamp(),
-        approvalRequestedAt: serverTimestamp()
+        updatedAt: serverTimestamp()
       });
 
-      await signOut(auth);
-      setUser(null);
+      setUser(nextUser);
     } catch (error) {
       throw new Error(getAuthErrorMessage(error));
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const joinClassWithCode = async (classJoinCode: string) => {
+    if (!user || user.role !== "student") {
+      throw createAuthError("dc/unauthorized-access");
+    }
+
+    if (user.classroomId && user.status === "active") {
+      throw new Error("You are already a member of a class.");
+    }
+
+    const classroom = await findClassroomByJoinCode(classJoinCode);
+
+    if (user.classroomId === classroom.id && user.status === "pending_approval") {
+      throw new Error("Your request for this class is already pending approval.");
+    }
+
+    const nextUser: User = {
+      ...user,
+      status: "pending_approval",
+      institution: classroom.institutionName || user.institution || DEFAULT_INSTITUTION,
+      institutionId: classroom.institutionId,
+      departmentId: classroom.departmentId,
+      department: classroom.departmentName,
+      semesterId: classroom.semesterId,
+      semester: classroom.semesterName,
+      classroomId: classroom.id,
+      classroomName: classroom.name || "Assigned Classroom",
+      classSection: classroom.section,
+      classJoinCode: classJoinCode.trim().toUpperCase()
+    };
+
+    await updateDoc(doc(db, "users", user.id), {
+      status: "pending_approval",
+      institution: nextUser.institution,
+      institutionId: nextUser.institutionId,
+      departmentId: nextUser.departmentId,
+      department: nextUser.department,
+      semesterId: nextUser.semesterId,
+      semester: nextUser.semester,
+      classroomId: nextUser.classroomId,
+      classroomName: nextUser.classroomName,
+      classSection: nextUser.classSection,
+      classJoinCode: nextUser.classJoinCode,
+      approvalRequestedAt: serverTimestamp(),
+      updatedAt: serverTimestamp()
+    });
+
+    setUser(nextUser);
   };
 
   const inviteTeacher = async ({ teacherName, email }: TeacherInvitationInput) => {
@@ -1353,16 +1389,23 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const allocateStudent = async ({ studentId, departmentId, semesterId, classId, approve = false }: StudentAllocationInput & { approve?: boolean }) => {
-    requireOrganizerInstitutionId();
+    if (!user || !["organizer", "teacher"].includes(user.role)) {
+      throw createAuthError("dc/unauthorized-access");
+    }
+
     const academicClass = (await listAcademicClasses({ departmentId, semesterId })).find((item) => item.id === classId);
 
     if (!academicClass) {
       throw createAuthError("dc/class-code-invalid");
     }
 
+    if (user.role === "teacher" && user.classroomId !== classId) {
+      throw createAuthError("dc/unauthorized-access");
+    }
+
     const allocationUpdate = {
       status: approve ? "active" as const : "pending_approval" as const,
-      institution: user?.institution || DEFAULT_INSTITUTION,
+      institution: user.institution || DEFAULT_INSTITUTION,
       institutionId: academicClass.institutionId,
       departmentId,
       department: academicClass.departmentName,
@@ -1377,7 +1420,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     await updateDoc(doc(db, "users", studentId), approve ? {
       ...allocationUpdate,
-      reviewedBy: user?.id,
+      reviewedBy: user.id,
       reviewedAt: serverTimestamp()
     } : allocationUpdate);
   };
@@ -1411,11 +1454,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           approvalRequestedAt: student.approvalRequestedAt
         };
       })
-      .filter((student) => !user.institutionId || student.institutionId === user.institutionId || student.institution === user.institution);
+      .filter((student) => {
+        if (user.role === "teacher") {
+          return student.classroomId === user.classroomId;
+        }
+
+        return !user.institutionId || student.institutionId === user.institutionId || student.institution === user.institution;
+      });
   };
 
   const decideStudentRequest = async (studentId: string, decision: "approve" | "reject") => {
-    if (!user || user.role !== "organizer") {
+    if (!user || !["organizer", "teacher"].includes(user.role)) {
       throw createAuthError("dc/unauthorized-access");
     }
 
@@ -1501,6 +1550,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         login,
         registerOrganizer,
         requestStudentAccess,
+        joinClassWithCode,
         inviteTeacher,
         activateTeacherInvitation,
         getTeacherInvitation,

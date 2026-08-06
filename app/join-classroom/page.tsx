@@ -1,66 +1,25 @@
 "use client";
 
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useState } from "react";
 import Link from "next/link";
-import { BookOpenCheck, CheckCircle2, Eye, EyeOff, Layers3, Loader2, UserPlus } from "lucide-react";
+import { BookOpenCheck, CheckCircle2, Eye, EyeOff, KeyRound, Loader2, UserPlus } from "lucide-react";
 import AuthShell from "@/components/auth/AuthShell";
-import { AcademicClass, AcademicDepartment, AcademicSemester, useAuth } from "@/contexts/AuthContext";
+import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
 
 const JoinClassroomPage: React.FC = () => {
-  const { requestStudentAccess, listDepartments, listSemesters, listAcademicClasses, isLoading } = useAuth();
+  const { requestStudentAccess, isLoading } = useAuth();
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [isSubmitted, setIsSubmitted] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
-  const [isLoadingStructure, setIsLoadingStructure] = useState(true);
-  const [departments, setDepartments] = useState<AcademicDepartment[]>([]);
-  const [semesters, setSemesters] = useState<AcademicSemester[]>([]);
-  const [classes, setClasses] = useState<AcademicClass[]>([]);
   const [formData, setFormData] = useState({
     fullName: "",
     email: "",
     rollNumber: "",
     password: "",
-    confirmPassword: "",
-    departmentId: "",
-    semesterId: "",
-    classId: "",
-    classJoinCode: ""
+    confirmPassword: ""
   });
-
-  useEffect(() => {
-    const loadStructure = async () => {
-      try {
-        const [departmentItems, semesterItems, classItems] = await Promise.all([
-          listDepartments(),
-          listSemesters(),
-          listAcademicClasses()
-        ]);
-        setDepartments(departmentItems);
-        setSemesters(semesterItems);
-        setClasses(classItems);
-      } catch {
-        setErrorMessage("Unable to load organization classes right now.");
-      } finally {
-        setIsLoadingStructure(false);
-      }
-    };
-
-    loadStructure();
-    // The auth context methods are recreated with context state, so this page loads the public structure once on mount.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  const availableSemesters = useMemo(
-    () => semesters.filter((semester) => semester.departmentId === formData.departmentId),
-    [formData.departmentId, semesters]
-  );
-
-  const availableClasses = useMemo(
-    () => classes.filter((classroom) => classroom.departmentId === formData.departmentId && classroom.semesterId === formData.semesterId),
-    [classes, formData.departmentId, formData.semesterId]
-  );
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -76,14 +35,10 @@ const JoinClassroomPage: React.FC = () => {
         fullName: formData.fullName,
         email: formData.email,
         rollNumber: formData.rollNumber,
-        password: formData.password,
-        departmentId: formData.departmentId,
-        semesterId: formData.semesterId,
-        classId: formData.classId,
-        classJoinCode: formData.classJoinCode
+        password: formData.password
       });
       setIsSubmitted(true);
-      toast.success("Join request submitted successfully.");
+      toast.success("Student account created successfully.");
     } catch (error) {
       const message = error instanceof Error ? error.message : "Unable to submit your request right now.";
       setErrorMessage(message);
@@ -94,26 +49,26 @@ const JoinClassroomPage: React.FC = () => {
   return (
     <AuthShell
       title="Join a classroom"
-      description="Students request access to their allocated class. Once the organizer approves, assigned teachers and subjects appear automatically."
+      description="Create your student account first. After login, enter your class join code from My Classes."
       backLink={{ href: "/login", label: "Back to Sign In" }}
       sideContent={
         <>
           <div>
             <p className="text-sm font-semibold uppercase tracking-[0.22em] text-blue-100">Student Access</p>
-            <h2 className="mt-4 text-4xl font-semibold leading-tight">Join your class and get connected to its assigned teachers.</h2>
+            <h2 className="mt-4 text-4xl font-semibold leading-tight">Create your student login, then request access to your class.</h2>
           </div>
 
           <div className="grid gap-4">
             {[
               {
-                icon: Layers3,
-                title: "Class allocation",
-                text: "Choose your department, semester, and class section during registration."
+                icon: UserPlus,
+                title: "Student account",
+                text: "Register with your name, roll number, email, and password."
               },
               {
-                icon: UserPlus,
-                title: "Approval workflow",
-                text: "Your request is reviewed by the organizer before your student account becomes active."
+                icon: KeyRound,
+                title: "Class join code",
+                text: "After login, submit the class code shared by your teacher or organizer."
               },
               {
                 icon: BookOpenCheck,
@@ -146,9 +101,9 @@ const JoinClassroomPage: React.FC = () => {
           <div className="mb-4 inline-flex rounded-2xl bg-emerald-100 p-3 text-emerald-700">
             <CheckCircle2 size={22} />
           </div>
-          <p className="text-base font-semibold">Your request has been sent to the organizer for approval.</p>
+          <p className="text-base font-semibold">Your student account is ready.</p>
           <p className="mt-3 text-sm leading-7">
-            Once your request is approved, you can return to the main Sign In page and access your student dashboard.
+            Sign in to the Student Dashboard, open My Classes, and enter your class join code to request access.
           </p>
         </div>
       ) : (
@@ -156,12 +111,6 @@ const JoinClassroomPage: React.FC = () => {
           {errorMessage ? (
             <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
               {errorMessage}
-            </div>
-          ) : null}
-
-          {isLoadingStructure ? (
-            <div className="rounded-2xl border border-blue-100 bg-blue-50 px-4 py-3 text-sm text-blue-700">
-              Loading available classes...
             </div>
           ) : null}
 
@@ -200,59 +149,6 @@ const JoinClassroomPage: React.FC = () => {
                 placeholder="Enter your roll number"
                 required
               />
-            </div>
-
-            <div className="space-y-2">
-              <label className="block text-sm font-medium text-slate-700">Department</label>
-              <select
-                value={formData.departmentId}
-                onChange={(e) => setFormData({ ...formData, departmentId: e.target.value, semesterId: "", classId: "" })}
-                className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 outline-none transition focus:border-blue-400 focus:ring-4 focus:ring-blue-100"
-                required
-              >
-                <option value="">Select department</option>
-                {departments.map((department) => (
-                  <option key={department.id} value={department.id}>
-                    {department.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div className="space-y-2">
-              <label className="block text-sm font-medium text-slate-700">Semester</label>
-              <select
-                value={formData.semesterId}
-                onChange={(e) => setFormData({ ...formData, semesterId: e.target.value, classId: "" })}
-                className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 outline-none transition focus:border-blue-400 focus:ring-4 focus:ring-blue-100"
-                required
-                disabled={!formData.departmentId}
-              >
-                <option value="">Select semester</option>
-                {availableSemesters.map((semester) => (
-                  <option key={semester.id} value={semester.id}>
-                    {semester.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div className="space-y-2 sm:col-span-2">
-              <label className="block text-sm font-medium text-slate-700">Class / Section</label>
-              <select
-                value={formData.classId}
-                onChange={(e) => setFormData({ ...formData, classId: e.target.value })}
-                className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 outline-none transition focus:border-blue-400 focus:ring-4 focus:ring-blue-100"
-                required
-                disabled={!formData.semesterId}
-              >
-                <option value="">Select class</option>
-                {availableClasses.map((classroom) => (
-                  <option key={classroom.id} value={classroom.id}>
-                    {classroom.name} - Section {classroom.section}
-                  </option>
-                ))}
-              </select>
             </div>
 
             <div className="space-y-2">
@@ -299,21 +195,11 @@ const JoinClassroomPage: React.FC = () => {
               </div>
             </div>
 
-            <div className="space-y-2 sm:col-span-2">
-              <label className="block text-sm font-medium text-slate-700">Class Code (optional)</label>
-              <input
-                type="text"
-                value={formData.classJoinCode}
-                onChange={(e) => setFormData({ ...formData, classJoinCode: e.target.value.toUpperCase() })}
-                className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 uppercase tracking-[0.14em] outline-none transition focus:border-blue-400 focus:ring-4 focus:ring-blue-100"
-                placeholder="Enter class code if your organization requires it"
-              />
-            </div>
           </div>
 
           <button
             type="submit"
-            disabled={isLoading || isLoadingStructure}
+            disabled={isLoading}
             className="flex w-full items-center justify-center gap-2 rounded-2xl bg-blue-600 px-4 py-3 text-sm font-semibold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-blue-400"
           >
             {isLoading ? (
@@ -322,7 +208,7 @@ const JoinClassroomPage: React.FC = () => {
                 Sending request...
               </>
             ) : (
-              "Request to Join Classroom"
+              "Create Student Account"
             )}
           </button>
         </form>
