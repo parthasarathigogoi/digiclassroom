@@ -18,7 +18,6 @@ import {
   Phone,
   Save,
   Shield,
-  User,
   Users,
   XCircle
 } from "lucide-react";

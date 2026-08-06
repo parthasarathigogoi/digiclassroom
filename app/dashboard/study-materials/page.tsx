@@ -13,7 +13,7 @@ import {
   Search,
   StickyNote
 } from "lucide-react";
-import { collection, getDocs, query, where } from "firebase/firestore";
+import { collection, getDocs, query } from "firebase/firestore";
 import { toast } from "sonner";
 import { canAccessAllocationScope, useAuth } from "@/contexts/AuthContext";
 import { db } from "@/lib/firebase";
