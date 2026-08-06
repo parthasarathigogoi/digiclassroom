@@ -1551,7 +1551,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setIsLoading(true);
 
     try {
-      const updatedUser: User = { ...user, ...updates, updatedAt: serverTimestamp() };
+      const updatedUser: User = { ...user, ...updates };
 
       if (auth.currentUser && updates.name) {
         await updateProfile(auth.currentUser, { displayName: updates.name });
