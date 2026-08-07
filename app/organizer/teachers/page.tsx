@@ -372,21 +372,36 @@ const OrganizerTeachersPage: React.FC = () => {
         <form onSubmit={allocateTeacherScope} className="mt-5 grid gap-4 lg:grid-cols-5">
           <input required type="email" value={allocationForm.teacherEmail} onChange={(event) => setAllocationForm({ ...allocationForm, teacherEmail: event.target.value })} placeholder="Teacher Gmail" className="rounded-xl border border-slate-200 px-4 py-3 outline-none focus:border-ocean dark:border-slate-800 dark:bg-slate-950" />
           <select required value={allocationForm.departmentId} onChange={(event) => setAllocationForm({ ...allocationForm, departmentId: event.target.value, semesterId: "", classId: "", subjectId: "" })} className="rounded-xl border border-slate-200 px-4 py-3 outline-none focus:border-ocean dark:border-slate-800 dark:bg-slate-950">
-            <option value="">Department</option>
+            <option value="">{departments.length ? "Department" : "Create a department first"}</option>
             {departments.map((department) => <option key={department.id} value={department.id}>{department.name}</option>)}
           </select>
-          <select required value={allocationForm.semesterId} onChange={(event) => setAllocationForm({ ...allocationForm, semesterId: event.target.value, classId: "", subjectId: "" })} className="rounded-xl border border-slate-200 px-4 py-3 outline-none focus:border-ocean dark:border-slate-800 dark:bg-slate-950">
-            <option value="">Semester</option>
-            {semesters.filter((semester) => semester.departmentId === allocationForm.departmentId).map((semester) => <option key={semester.id} value={semester.id}>{semester.name}</option>)}
-          </select>
-          <select required value={allocationForm.classId} onChange={(event) => setAllocationForm({ ...allocationForm, classId: event.target.value })} className="rounded-xl border border-slate-200 px-4 py-3 outline-none focus:border-ocean dark:border-slate-800 dark:bg-slate-950">
-            <option value="">Class / Section</option>
-            {classes.filter((item) => item.departmentId === allocationForm.departmentId && item.semesterId === allocationForm.semesterId).map((item) => <option key={item.id} value={item.id}>{item.name} · {item.section}</option>)}
-          </select>
-          <select required value={allocationForm.subjectId} onChange={(event) => setAllocationForm({ ...allocationForm, subjectId: event.target.value })} className="rounded-xl border border-slate-200 px-4 py-3 outline-none focus:border-ocean dark:border-slate-800 dark:bg-slate-950">
-            <option value="">Subject</option>
-            {subjects.filter((item) => item.departmentId === allocationForm.departmentId && item.semesterId === allocationForm.semesterId).map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
-          </select>
+          {(() => {
+            const opts = semesters.filter((semester) => !allocationForm.departmentId || semester.departmentId === allocationForm.departmentId);
+            return (
+              <select required value={allocationForm.semesterId} disabled={!allocationForm.departmentId || opts.length === 0} onChange={(event) => setAllocationForm({ ...allocationForm, semesterId: event.target.value, classId: "", subjectId: "" })} className="rounded-xl border border-slate-200 px-4 py-3 outline-none focus:border-ocean disabled:opacity-50 dark:border-slate-800 dark:bg-slate-950">
+                <option value="">{opts.length ? "Semester" : "No semester"}</option>
+                {opts.map((semester) => <option key={semester.id} value={semester.id}>{semester.name}</option>)}
+              </select>
+            );
+          })()}
+          {(() => {
+            const opts = classes.filter((item) => (!allocationForm.departmentId || item.departmentId === allocationForm.departmentId) && (!allocationForm.semesterId || item.semesterId === allocationForm.semesterId));
+            return (
+              <select required value={allocationForm.classId} disabled={!allocationForm.departmentId || !allocationForm.semesterId || opts.length === 0} onChange={(event) => setAllocationForm({ ...allocationForm, classId: event.target.value })} className="rounded-xl border border-slate-200 px-4 py-3 outline-none focus:border-ocean disabled:opacity-50 dark:border-slate-800 dark:bg-slate-950">
+                <option value="">{opts.length ? "Class / Section" : "No class"}</option>
+                {opts.map((item) => <option key={item.id} value={item.id}>{item.name} · {item.section}</option>)}
+              </select>
+            );
+          })()}
+          {(() => {
+            const opts = subjects.filter((item) => (!allocationForm.departmentId || item.departmentId === allocationForm.departmentId) && (!allocationForm.semesterId || item.semesterId === allocationForm.semesterId));
+            return (
+              <select required value={allocationForm.subjectId} disabled={!allocationForm.departmentId || !allocationForm.semesterId || opts.length === 0} onChange={(event) => setAllocationForm({ ...allocationForm, subjectId: event.target.value })} className="rounded-xl border border-slate-200 px-4 py-3 outline-none focus:border-ocean disabled:opacity-50 dark:border-slate-800 dark:bg-slate-950">
+                <option value="">{opts.length ? "Subject" : "No subject"}</option>
+                {opts.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
+              </select>
+            );
+          })()}
           <button disabled={isAllocating} className="inline-flex items-center justify-center gap-2 rounded-xl bg-ocean px-5 py-3 text-sm font-bold text-white disabled:bg-blue-300 lg:col-span-5">
             {isAllocating ? <Loader2 className="animate-spin" size={18} /> : <UserCog size={18} />}
             Save Teacher Allocation

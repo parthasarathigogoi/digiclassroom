@@ -670,21 +670,36 @@ const QuestionBankPage: React.FC = () => {
             <Field label="Allocation Scope">
               <div className="grid gap-3 rounded-xl border border-slate-200 bg-slate-50 p-4 md:grid-cols-4 dark:border-slate-800 dark:bg-slate-950">
                 <select required value={draft.departmentId} onChange={(e) => setDraft({ ...draft, departmentId: e.target.value, semesterId: "", classId: "", subjectId: "" })} className="rounded-xl border border-slate-200 bg-white px-3 py-2.5 outline-none focus:border-ocean dark:border-slate-800 dark:bg-slate-900">
-                  <option value="">Department</option>
+                  <option value="">{draftDepartments.length ? "Department" : "No department — ask organizer"}</option>
                   {draftDepartments.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
                 </select>
-                <select required value={draft.semesterId} onChange={(e) => setDraft({ ...draft, semesterId: e.target.value, classId: "", subjectId: "" })} disabled={!draft.departmentId} className="rounded-xl border border-slate-200 bg-white px-3 py-2.5 outline-none focus:border-ocean disabled:opacity-50 dark:border-slate-800 dark:bg-slate-900">
-                  <option value="">Semester</option>
-                  {draftSemesters.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
-                </select>
-                <select required value={draft.classId} onChange={(e) => setDraft({ ...draft, classId: e.target.value })} disabled={!draft.departmentId || !draft.semesterId} className="rounded-xl border border-slate-200 bg-white px-3 py-2.5 outline-none focus:border-ocean disabled:opacity-50 dark:border-slate-800 dark:bg-slate-900">
-                  <option value="">Class / Section</option>
-                  {draftClasses.map((c) => <option key={c.id} value={c.id}>{c.name} · {c.section}</option>)}
-                </select>
-                <select required value={draft.subjectId} onChange={(e) => setDraft({ ...draft, subjectId: e.target.value })} disabled={!draft.departmentId || !draft.semesterId} className="rounded-xl border border-slate-200 bg-white px-3 py-2.5 outline-none focus:border-ocean disabled:opacity-50 dark:border-slate-800 dark:bg-slate-900">
-                  <option value="">Subject</option>
-                  {draftSubjects.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
-                </select>
+                {(() => {
+                  const opts = draftSemesters;
+                  return (
+                    <select required value={draft.semesterId} disabled={!draft.departmentId || opts.length === 0} onChange={(e) => setDraft({ ...draft, semesterId: e.target.value, classId: "", subjectId: "" })} className="rounded-xl border border-slate-200 bg-white px-3 py-2.5 outline-none focus:border-ocean disabled:opacity-50 dark:border-slate-800 dark:bg-slate-900">
+                      <option value="">{opts.length ? "Semester" : "No semester"}</option>
+                      {opts.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+                    </select>
+                  );
+                })()}
+                {(() => {
+                  const opts = draftClasses;
+                  return (
+                    <select required value={draft.classId} disabled={!draft.departmentId || !draft.semesterId || opts.length === 0} onChange={(e) => setDraft({ ...draft, classId: e.target.value })} className="rounded-xl border border-slate-200 bg-white px-3 py-2.5 outline-none focus:border-ocean disabled:opacity-50 dark:border-slate-800 dark:bg-slate-900">
+                      <option value="">{opts.length ? "Class / Section" : "No class"}</option>
+                      {opts.map((c) => <option key={c.id} value={c.id}>{c.name} · {c.section}</option>)}
+                    </select>
+                  );
+                })()}
+                {(() => {
+                  const opts = draftSubjects;
+                  return (
+                    <select required value={draft.subjectId} disabled={!draft.departmentId || !draft.semesterId || opts.length === 0} onChange={(e) => setDraft({ ...draft, subjectId: e.target.value })} className="rounded-xl border border-slate-200 bg-white px-3 py-2.5 outline-none focus:border-ocean disabled:opacity-50 dark:border-slate-800 dark:bg-slate-900">
+                      <option value="">{opts.length ? "Subject" : "No subject"}</option>
+                      {opts.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+                    </select>
+                  );
+                })()}
               </div>
             </Field>
 
@@ -775,21 +790,36 @@ const QuestionBankPage: React.FC = () => {
 
             <div className="grid gap-3 md:grid-cols-4">
               <select required value={draft.departmentId} onChange={(e) => setDraft({ ...draft, departmentId: e.target.value, semesterId: "", classId: "", subjectId: "" })} className="rounded-xl border border-slate-200 bg-white px-4 py-3 outline-none focus:border-ocean dark:border-slate-800 dark:bg-slate-950">
-                <option value="">Department</option>
+                <option value="">{draftDepartments.length ? "Department" : "No department — ask organizer"}</option>
                 {draftDepartments.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
               </select>
-              <select required value={draft.semesterId} onChange={(e) => setDraft({ ...draft, semesterId: e.target.value, classId: "", subjectId: "" })} disabled={!draft.departmentId} className="rounded-xl border border-slate-200 bg-white px-4 py-3 outline-none focus:border-ocean disabled:opacity-50 dark:border-slate-800 dark:bg-slate-950">
-                <option value="">Semester</option>
-                {draftSemesters.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
-              </select>
-              <select required value={draft.classId} onChange={(e) => setDraft({ ...draft, classId: e.target.value })} disabled={!draft.departmentId || !draft.semesterId} className="rounded-xl border border-slate-200 bg-white px-4 py-3 outline-none focus:border-ocean disabled:opacity-50 dark:border-slate-800 dark:bg-slate-950">
-                <option value="">Class / Section</option>
-                {draftClasses.map((c) => <option key={c.id} value={c.id}>{c.name} · {c.section}</option>)}
-              </select>
-              <select required value={draft.subjectId} onChange={(e) => setDraft({ ...draft, subjectId: e.target.value })} disabled={!draft.departmentId || !draft.semesterId} className="rounded-xl border border-slate-200 bg-white px-4 py-3 outline-none focus:border-ocean disabled:opacity-50 dark:border-slate-800 dark:bg-slate-950">
-                <option value="">Subject</option>
-                {draftSubjects.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
-              </select>
+              {(() => {
+                const opts = draftSemesters;
+                return (
+                  <select required value={draft.semesterId} disabled={!draft.departmentId || opts.length === 0} onChange={(e) => setDraft({ ...draft, semesterId: e.target.value, classId: "", subjectId: "" })} className="rounded-xl border border-slate-200 bg-white px-4 py-3 outline-none focus:border-ocean disabled:opacity-50 dark:border-slate-800 dark:bg-slate-950">
+                    <option value="">{opts.length ? "Semester" : "No semester"}</option>
+                    {opts.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+                  </select>
+                );
+              })()}
+              {(() => {
+                const opts = draftClasses;
+                return (
+                  <select required value={draft.classId} disabled={!draft.departmentId || !draft.semesterId || opts.length === 0} onChange={(e) => setDraft({ ...draft, classId: e.target.value })} className="rounded-xl border border-slate-200 bg-white px-4 py-3 outline-none focus:border-ocean disabled:opacity-50 dark:border-slate-800 dark:bg-slate-950">
+                    <option value="">{opts.length ? "Class / Section" : "No class"}</option>
+                    {opts.map((c) => <option key={c.id} value={c.id}>{c.name} · {c.section}</option>)}
+                  </select>
+                );
+              })()}
+              {(() => {
+                const opts = draftSubjects;
+                return (
+                  <select required value={draft.subjectId} disabled={!draft.departmentId || !draft.semesterId || opts.length === 0} onChange={(e) => setDraft({ ...draft, subjectId: e.target.value })} className="rounded-xl border border-slate-200 bg-white px-4 py-3 outline-none focus:border-ocean disabled:opacity-50 dark:border-slate-800 dark:bg-slate-950">
+                    <option value="">{opts.length ? "Subject" : "No subject"}</option>
+                    {opts.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+                  </select>
+                );
+              })()}
             </div>
 
             <div className="rounded-xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-950">

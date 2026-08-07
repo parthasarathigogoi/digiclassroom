@@ -1735,6 +1735,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const allocateTeacher = async ({ teacherUserId, teacherEmail, departmentId, semesterId, classId, subjectId }: TeacherAllocationInput) => {
     requireOrganizerInstitutionId();
+    const institutionId = user?.institutionId || user?.id || "";
 
     const [departments, semesters, classes, subjects] = await Promise.all([
       listDepartments(),
@@ -1769,7 +1770,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
 
     if (!academicClass || !subject) {
-      throw createAuthError("dc/invalid-allocation-scope");
+      const localClasses = readLocalItems<AcademicClass>(LOCAL_CLASSES_KEY);
+      const localSubjects = readLocalItems<AcademicSubject>(LOCAL_SUBJECTS_KEY);
+      academicClass = academicClass || localClasses.find((c) => c.id === classId);
+      subject = subject || localSubjects.find((s) => s.id === subjectId);
+      if (!academicClass || !subject) {
+        throw createAuthError("dc/invalid-allocation-scope");
+      }
     }
 
     if (
@@ -1781,29 +1788,64 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       throw createAuthError("dc/invalid-allocation-scope");
     }
 
-    const department = departments.find((item) => item.id === departmentId);
-    const semester = semesters.find((item) => item.id === semesterId);
+    const department = departments.find((item) => item.id === departmentId) || readLocalItems<AcademicDepartment>(LOCAL_DEPARTMENTS_KEY).find((d) => d.id === departmentId);
+    const semester = semesters.find((item) => item.id === semesterId) || readLocalItems<AcademicSemester>(LOCAL_SEMESTERS_KEY).find((s) => s.id === semesterId);
     const existingTeacher = teacherUserId ? { id: teacherUserId, profile: null } : await findUserProfileByEmail(teacherEmail);
     const teacherId = existingTeacher?.id || createLocalTeacherId(teacherEmail);
 
-    await setDoc(doc(db, "users", teacherId), {
+    const finalDepartmentName = department?.name || academicClass.departmentName || "Department";
+    const finalSemesterName = semester?.name || academicClass.semesterName || "Semester";
+
+    const payload = {
       id: teacherId,
       email: teacherEmail.trim().toLowerCase(),
       role: "teacher",
       status: "active",
       institution: user?.institution || DEFAULT_INSTITUTION,
-      institutionId: academicClass.institutionId,
+      institutionId: academicClass.institutionId || institutionId,
       departmentId,
-      department: department?.name || academicClass.departmentName,
+      department: finalDepartmentName,
       semesterId,
-      semester: semester?.name || academicClass.semesterName,
+      semester: finalSemesterName,
       classroomId: classId,
       classroomName: academicClass.name,
       classSection: academicClass.section,
       subjectId,
       subject: subject.name,
-      updatedAt: serverTimestamp()
-    }, { merge: true });
+      updatedAt: Date.now()
+    };
+
+    try {
+      await setDoc(doc(db, "users", teacherId), {
+        ...payload,
+        updatedAt: serverTimestamp()
+      }, { merge: true });
+    } catch {
+    }
+
+    try {
+      const teachers = readLocalItems<TeacherInvitation>(LOCAL_TEACHER_INVITATIONS_KEY);
+      const idx = teachers.findIndex((t) => t.id === teacherId || (t.email || "").toLowerCase() === teacherEmail.trim().toLowerCase());
+      const invite: TeacherInvitation = {
+        id: teacherId,
+        email: teacherEmail.trim().toLowerCase(),
+        role: "teacher",
+        status: "active",
+        departmentId,
+        departmentName: finalDepartmentName,
+        semesterId,
+        semesterName: finalSemesterName,
+        classId,
+        className: academicClass.name,
+        subjectId,
+        subjectName: subject.name,
+        institutionId: academicClass.institutionId || institutionId
+      };
+      if (idx >= 0) teachers[idx] = { ...teachers[idx], ...invite };
+      else teachers.push(invite);
+      writeLocalItems(LOCAL_TEACHER_INVITATIONS_KEY, teachers);
+    } catch {
+    }
   };
 
   const allocateStudent = async ({ studentId, departmentId, semesterId, classId, approve = false }: StudentAllocationInput & { approve?: boolean }) => {
@@ -1811,7 +1853,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       throw createAuthError("dc/unauthorized-access");
     }
 
-    const academicClass = (await listAcademicClasses({ departmentId, semesterId })).find((item) => item.id === classId);
+    let academicClass = (await listAcademicClasses({ departmentId, semesterId })).find((item) => item.id === classId);
+    if (!academicClass) {
+      academicClass = readLocalItems<AcademicClass>(LOCAL_CLASSES_KEY).find((c) => c.id === classId);
+    }
 
     if (!academicClass) {
       throw createAuthError("dc/class-code-invalid");
@@ -1833,14 +1878,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       classroomName: academicClass.name,
       classSection: academicClass.section,
       classJoinCode: academicClass.classCode,
-      updatedAt: serverTimestamp()
+      updatedAt: Date.now()
     };
 
-    await updateDoc(doc(db, "users", studentId), approve ? {
-      ...allocationUpdate,
-      reviewedBy: user.id,
-      reviewedAt: serverTimestamp()
-    } : allocationUpdate);
+    try {
+      await updateDoc(doc(db, "users", studentId), approve ? {
+        ...allocationUpdate,
+        reviewedBy: user.id,
+        reviewedAt: serverTimestamp(),
+        updatedAt: serverTimestamp()
+      } : { ...allocationUpdate, updatedAt: serverTimestamp() });
+    } catch {
+    }
   };
 
   const listPendingStudentRequests = async () => {
