@@ -1824,26 +1824,44 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
 
     try {
-      const teachers = readLocalItems<TeacherInvitation>(LOCAL_TEACHER_INVITATIONS_KEY);
-      const idx = teachers.findIndex((t) => t.id === teacherId || (t.email || "").toLowerCase() === teacherEmail.trim().toLowerCase());
-      const invite: TeacherInvitation = {
-        id: teacherId,
-        email: teacherEmail.trim().toLowerCase(),
-        role: "teacher",
-        status: "active",
-        departmentId,
-        departmentName: finalDepartmentName,
-        semesterId,
-        semesterName: finalSemesterName,
-        classId,
-        className: academicClass.name,
-        subjectId,
-        subjectName: subject.name,
-        institutionId: academicClass.institutionId || institutionId
-      };
-      if (idx >= 0) teachers[idx] = { ...teachers[idx], ...invite };
-      else teachers.push(invite);
-      writeLocalItems(LOCAL_TEACHER_INVITATIONS_KEY, teachers);
+      const accounts = readLocalItems<User>(LOCAL_USERS_KEY);
+      const existing = accounts.find((a) => a.id === teacherId || (a.email || "").toLowerCase() === teacherEmail.trim().toLowerCase());
+      if (existing) {
+        Object.assign(existing, {
+          institutionId: academicClass.institutionId || institutionId,
+          departmentId,
+          department: finalDepartmentName,
+          semesterId,
+          semester: finalSemesterName,
+          classroomId: classId,
+          classroomName: academicClass.name,
+          classSection: academicClass.section,
+          subjectId,
+          subject: subject.name,
+          role: "teacher",
+          status: "active"
+        });
+      } else {
+        accounts.push({
+          id: teacherId,
+          name: "",
+          email: teacherEmail.trim().toLowerCase(),
+          role: "teacher",
+          status: "active",
+          institution: user?.institution || DEFAULT_INSTITUTION,
+          institutionId: academicClass.institutionId || institutionId,
+          departmentId,
+          department: finalDepartmentName,
+          semesterId,
+          semester: finalSemesterName,
+          classroomId: classId,
+          classroomName: academicClass.name,
+          classSection: academicClass.section,
+          subjectId,
+          subject: subject.name
+        } as User);
+      }
+      writeLocalItems(LOCAL_USERS_KEY, accounts);
     } catch {
     }
   };
